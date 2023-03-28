@@ -372,7 +372,7 @@ private:
 
   T * m_pObject;
   std::vector<Edge<T> *> m_Edges;
-  kt_double m_Score;
+  kt_double m_Score;  // Score for the scan-matching algorithm
 
   friend class boost::serialization::access;
   template<class Archive>
@@ -795,7 +795,8 @@ public:
     kt_double maxDistance);
 
   /**
-   * Find closest scan to pose
+   * Find the closest scan to pose (vertex / node) based on the given pose, that is refPose.
+   * Use a k-d tree for efficient nearest-neightboring searches
    * @param pScan
    */
   Vertex<LocalizedRangeScan> * FindNearByScan(Name name, const Pose2 refPose);

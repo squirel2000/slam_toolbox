@@ -18,7 +18,7 @@ slam_toolbox:
     mode: mapping
 
     # lifelong params
-    lifelong_search_use_tree: false
+    lifelong_search_use_tree: false # TODO: make this true for checking performance in LifelongSlamToolbox::FindScansWithinRadius()
     lifelong_minimum_score: 0.1
     lifelong_iou_match: 0.85
     lifelong_node_removal_score: 0.04
@@ -30,9 +30,9 @@ slam_toolbox:
     # if you'd like to immediately start continuing a map at a given pose
     # or at the dock, but they are mutually exclusive, if pose is given
     # will use pose
-    #map_file_name: test_steve
-    #map_start_pose: [0.0, 0.0, 0.0]
-    #map_start_at_dock: true
+    map_file_name: /home/asus/colcon_ws/src/asus_amr/asus_vms/data/data04
+    map_start_pose: [1.0, 1.0, 0.0]
+    #map_start_at_dock: true  # default: false
 
     debug_logging: false
     throttle_scans: 1

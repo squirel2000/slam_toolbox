@@ -110,6 +110,8 @@ void SlamToolbox::setSolver()
     solver_ = solver_loader_.createSharedInstance(solver_plugin);
     RCLCPP_INFO(get_logger(), "Using solver plugin %s",
       solver_plugin.c_str());
+
+    // Set the ceres_solver options by passing "this node" to the solver
     solver_->Configure(shared_from_this());
   } catch (const pluginlib::PluginlibException & ex) {
     RCLCPP_FATAL(get_logger(), "Failed to create %s, is it "
@@ -182,8 +184,33 @@ void SlamToolbox::setParams()
   }
 
   smapper_->configure(shared_from_this());
-  this->declare_parameter("paused_new_measurements",rclcpp::ParameterType::PARAMETER_BOOL);
-  this->set_parameter({"paused_new_measurements", false});
+  this->declare_parameter("paused_new_measurements", rclcpp::ParameterType::PARAMETER_BOOL);
+  this->set_parameter({"paused_new_measurements", true});
+
+  // std::string mode_test;
+  // if (this->get_parameter("mode", mode_test))  {
+  //   RCLCPP_INFO(this->get_logger(), "mode: %s", mode_test.c_str());
+  // }  else  {
+  //   RCLCPP_WARN(this->get_logger(), "Failed to get mode parameter, using default value: mapping");
+  //   mode_test = "mapping"; // default value
+  // }
+
+  // std::string mode_test = std::string("mapping");
+  // mode_test = this->declare_parameter("mode", mode_test);
+  // RCLCPP_WARN(this->get_logger(), "mode: %s", mode_test.c_str());
+
+  // std::string mode1 = this->get_parameter("mode").as_string();
+  // RCLCPP_WARN(this->get_logger(), "mode1: %s", mode1.c_str());
+
+  // bool paused_new_measurements = false;
+  // std::string mode = std::string("mapping");
+  // mode = this->get_parameter<std::string>("mode", mode);
+  // if (mode == std::string("localization"))  {
+  //   paused_new_measurements = true;
+  // }
+  // RCLCPP_WARN(get_logger(), "mode: %s; %s", mode.c_str(), paused_new_measurements ? "true" : "false");
+  // this->declare_parameter("paused_new_measurements", paused_new_measurements);
+  // this->set_parameter({"paused_new_measurements", paused_new_measurements});
 }
 
 /*****************************************************************************/
@@ -201,6 +228,7 @@ void SlamToolbox::setROSInterfaces()
   tfL_ = std::make_unique<tf2_ros::TransformListener>(*tf_);
   tfB_ = std::make_unique<tf2_ros::TransformBroadcaster>(shared_from_this());
 
+  // Publishers
   pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>(
     "pose", 10);
   sst_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>(
@@ -208,6 +236,8 @@ void SlamToolbox::setROSInterfaces()
   sstm_ = this->create_publisher<nav_msgs::msg::MapMetaData>(
     map_name_ + "_metadata",
     rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable());
+
+  // Services
   ssMap_ = this->create_service<nav_msgs::srv::GetMap>("slam_toolbox/dynamic_map",
       std::bind(&SlamToolbox::mapCallback, this, std::placeholders::_1,
       std::placeholders::_2, std::placeholders::_3));
@@ -225,6 +255,7 @@ void SlamToolbox::setROSInterfaces()
     std::bind(&SlamToolbox::deserializePoseGraphCallback, this,
     std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 
+  // Subscribers: /scan only
   scan_filter_sub_ =
     std::make_unique<message_filters::Subscriber<sensor_msgs::msg::LaserScan>>(
     shared_from_this().get(), scan_topic_, rmw_qos_profile_sensor_data);
@@ -298,7 +329,7 @@ void SlamToolbox::publishVisualizations()
 void SlamToolbox::loadPoseGraphByParams()
 /*****************************************************************************/
 {
-  std::string filename;
+  std::string filename; // map_file_name
   geometry_msgs::msg::Pose2D pose;
   bool dock = false;
   if (shouldStartWithPoseGraph(filename, pose, dock)) {
@@ -316,6 +347,7 @@ void SlamToolbox::loadPoseGraphByParams()
         slam_toolbox::srv::DeserializePoseGraph::Request::START_AT_GIVEN_POSE;
     }
 
+    // TODO: Send this (req, resp) to where?
     deserializePoseGraphCallback(nullptr, req, resp);
   }
 }
@@ -327,10 +359,17 @@ bool SlamToolbox::shouldStartWithPoseGraph(
 /*****************************************************************************/
 {
   // if given a map to load at run time, do it.
+  
+  // map_file_name: /home/asus/colcon_ws/src/asus_amr/asus_vms/data/data03
+  // map_start_pose: [-1.5, -0.5, 0.0]
+
   this->declare_parameter("map_file_name", std::string(""));
   auto map_start_pose = this->declare_parameter("map_start_pose",rclcpp::ParameterType::PARAMETER_DOUBLE_ARRAY);
   auto map_start_at_dock = this->declare_parameter("map_start_at_dock",rclcpp::ParameterType::PARAMETER_BOOL);
   filename = this->get_parameter("map_file_name").as_string();
+
+  RCLCPP_WARN(get_logger(), "shouldStartWithPoseGraph(): %s, ", filename.c_str() );
+
   if (!filename.empty()) {
     std::vector<double> read_pose;
     if (map_start_pose.get_type() != rclcpp::ParameterType::PARAMETER_NOT_SET) {
@@ -347,6 +386,9 @@ bool SlamToolbox::shouldStartWithPoseGraph(
         pose.x = read_pose[0];
         pose.y = read_pose[1];
         pose.theta = read_pose[2];
+
+        RCLCPP_WARN(get_logger(), "pose(%.3f, %.3f, %.3f)", pose.x, pose.y, pose.theta);
+
       }
     } else if (map_start_at_dock.get_type() != rclcpp::ParameterType::PARAMETER_NOT_SET) {
       start_at_dock = map_start_at_dock.get<bool>();
@@ -509,6 +551,7 @@ bool SlamToolbox::shouldProcessScan(
 
   // we give it a pass on the first measurement to get the ball rolling
   if (first_measurement_) {
+    std::cout << "This is the first measurement of a new scan, " << scan_ctr << std::endl;
     last_scan_time = scan->header.stamp;
     last_pose = pose;
     first_measurement_ = false;
@@ -529,6 +572,11 @@ bool SlamToolbox::shouldProcessScan(
   if (rclcpp::Time(scan->header.stamp) - last_scan_time < minimum_time_interval_) {
     return false;
   }
+  // if (rclcpp::Time(scan->header.stamp) - last_scan_time > minimum_time_interval_) {
+  //   last_pose = pose;
+  //   last_scan_time = scan->header.stamp;
+  //   return true;
+  // }
 
   // check moved enough, within 10% for correction error
   const double dist2 = last_pose.SquaredDistance(pose);
@@ -589,7 +637,7 @@ LocalizedRangeScan * SlamToolbox::addScan(
       range_scan, false, &covariance);
     update_reprocessing_transform = true;
     processor_type_ = PROCESS;
-  } else {
+  } else {  // TODO: The type of PROCESS_LOCALIZATION is not implemented yet? -> declared in slam_toolbox_localization.cpp
     RCLCPP_FATAL(get_logger(),
       "SlamToolbox: No valid processor type set! Exiting.");
     exit(-1);
@@ -761,6 +809,7 @@ void SlamToolbox::loadSerializedPoseGraph(
   LaserRangeFinder * laser =
     dynamic_cast<LaserRangeFinder *>(
     dataset_->GetLasers()[0]);
+  // Cast the LaserRangeFinder pointer to a more generic Sensor pointer
   Sensor * pSensor = dynamic_cast<Sensor *>(laser);
   if (pSensor) {
     SensorManager::GetInstance()->RegisterSensor(pSensor);

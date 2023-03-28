@@ -150,7 +150,9 @@ LocalizedRangeScan * LocalizationSlamToolbox::addScan(
 {
   boost::mutex::scoped_lock l(pose_mutex_);
 
+  // Before receiving the /initialpose, process_near_pose_ is invalid
   if (PROCESS_LOCALIZATION && process_near_pose_) {
+    // std::cout << "process_near_pose_: " << process_near_pose_->GetX() << ", " << process_near_pose_->GetY() << std::endl;
     processor_type_ = PROCESS_NEAR_REGION;
   }
 
@@ -181,9 +183,16 @@ LocalizedRangeScan * LocalizationSlamToolbox::addScan(
     // reset to localization mode
     update_reprocessing_transform = true;
     processor_type_ = PROCESS_LOCALIZATION;
+    // For the first time
+    RCLCPP_INFO(get_logger(), "PROCESS_NEAR_REGION(%.3f, %.3f, %.3f)",
+                range_scan->GetCorrectedPose().GetX(), range_scan->GetCorrectedPose().GetY(), range_scan->GetCorrectedPose().GetHeading());
+                
   } else if (processor_type_ == PROCESS_LOCALIZATION) {
     processed = smapper_->getMapper()->ProcessLocalization(range_scan, &covariance);
     update_reprocessing_transform = false;
+    // For the following processing 
+    RCLCPP_INFO(get_logger(), "PROCESS_LOCALIZATION(%.3f, %.3f, %.3f)",
+                range_scan->GetCorrectedPose().GetX(), range_scan->GetCorrectedPose().GetY(), range_scan->GetCorrectedPose().GetHeading());
   } else {
     RCLCPP_FATAL(get_logger(), "LocalizationSlamToolbox: "
       "No valid processor type set! Exiting.");
@@ -219,6 +228,8 @@ void LocalizationSlamToolbox::localizePoseCallback(
   }
 
   boost::mutex::scoped_lock l(pose_mutex_);
+  // For the first time, process_near_pose_ is set to false, so create this process_near_pose_.
+  // Otherwise, if we have a valid process_near_pose_, we use it but reset its pose.
   if (process_near_pose_) {
     process_near_pose_.reset(new Pose2(msg->pose.pose.position.x,
       msg->pose.pose.position.y, tf2::getYaw(msg->pose.pose.orientation)));

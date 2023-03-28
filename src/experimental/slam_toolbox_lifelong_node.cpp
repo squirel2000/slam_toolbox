@@ -32,6 +32,7 @@ int main(int argc, char ** argv)
       RCLCPP_INFO(temp_node->get_logger(), "Node using stack size %i", (int)stack_size);
       const rlim_t max_stack_size = stack_size;
       struct rlimit stack_limit;
+      // Get the stack size limit instead of the total memory size 
       getrlimit(RLIMIT_STACK, &stack_limit);
       if (stack_limit.rlim_cur < stack_size) {
         stack_limit.rlim_cur = stack_size;

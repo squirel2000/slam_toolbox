@@ -1480,10 +1480,26 @@ public:
   }
 
   /**
-   * Performs an exact search in the tree starting from a node.
+   * 
+   * 
    * \tparam RESULTSET Should be any ResultSet<DistanceType>
+   * mindistsq
    * \return true if the search should be continued, false if the results are
    * sufficient
+   */
+
+  /**
+   * @brief Performs an exact search in the tree starting from a node.
+   *        Represents a KD-tree search algorithm that efficiently searches for the nearest points in a multi-dimensional space to a given query point.
+   * 
+   * @tparam RESULTSET Should be any ResultSet<DistanceType>
+   * @param result_set  a reference to an object of type RESULTSET that will store the search results
+   * @param vec         a pointer to an array of 'ElementType', representing the query point
+   * @param node
+   * @param mindistsq   the minimum distance squared between the query point and the bounding box of the current node
+   * @param dists       a reference to a vector of distances used during the search
+   * @param epsError    an error threshold for stopping the search
+   * @return
    */
   template<class RESULTSET>
   bool searchLevel(

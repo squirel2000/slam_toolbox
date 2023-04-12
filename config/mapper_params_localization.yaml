@@ -45,7 +45,7 @@ slam_toolbox:
     loop_match_minimum_response_fine: 0.45
 
     # Correlation Parameters - Correlation Parameters
-    correlation_search_space_dimension: 0.5
+    correlation_search_space_dimension: 1.0 # TODO: Default is 0.5
     correlation_search_space_resolution: 0.01
     correlation_search_space_smear_deviation: 0.1 
 

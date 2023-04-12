@@ -152,7 +152,6 @@ LocalizedRangeScan * LocalizationSlamToolbox::addScan(
 
   // Before receiving the /initialpose, process_near_pose_ is invalid
   if (PROCESS_LOCALIZATION && process_near_pose_) {
-    // std::cout << "process_near_pose_: " << process_near_pose_->GetX() << ", " << process_near_pose_->GetY() << std::endl;
     processor_type_ = PROCESS_NEAR_REGION;
   }
 
@@ -178,7 +177,7 @@ LocalizedRangeScan * LocalizationSlamToolbox::addScan(
     range_scan->SetOdometricPose(*process_near_pose_);
     range_scan->SetCorrectedPose(range_scan->GetOdometricPose());
     process_near_pose_.reset(nullptr);
-    processed = smapper_->getMapper()->ProcessAgainstNodesNearBy(range_scan, true, &covariance);
+    processed = smapper_->getMapper()->searchBestVertexInMap(range_scan, true, &covariance);
 
     // reset to localization mode
     update_reprocessing_transform = true;

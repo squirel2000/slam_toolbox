@@ -795,10 +795,30 @@ public:
     kt_double maxDistance);
 
   /**
+   * @brief Find the vertex with the highest score in the mapper graph
+   * 
+   * @param pScan 
+   * @return kt_bool 
+   */
+  // kt_bool findBestVertexInMap(MapperSensorManager *m_pMapperSensorManager,
+  //                             Parameter<kt_bool> *m_pUseScanMatching, ScanMatcher *m_pSequentialScanMatcher,
+  //                             LocalizedRangeScan *pScan);
+  // kt_bool findBestVertexInMap(MapperSensorManager *m_pMapperSensorManager, LocalizedRangeScan *pScan);
+
+  /**
+   * @brief Get the Vertices object in the map(name)
+   * 
+   * @param name 
+   * @return std::vector<Vertex<LocalizedRangeScan> *> 
+   */
+  std::vector<Vertex<LocalizedRangeScan> *> getMapVertices(Name name);
+
+  /**
    * Find the closest scan to pose (vertex / node) based on the given pose, that is refPose.
    * Use a k-d tree for efficient nearest-neightboring searches
    * @param pScan
    */
+  std::vector<Vertex<LocalizedRangeScan> *> tyFindNearByScan(Name name, const Pose2 refPose);
   Vertex<LocalizedRangeScan> * FindNearByScan(Name name, const Pose2 refPose);
 
   /**
@@ -1364,6 +1384,14 @@ public:
     Pose2 & rMean, Matrix3 & rCovariance,
     kt_bool doPenalize = true,
     kt_bool doRefineMatch = true);
+  
+  template <class T = LocalizedRangeScanVector>
+  kt_double tyMatchScan(
+      LocalizedRangeScan *pScan,
+      const T &rBaseScans,
+      Pose2 &rMean, Matrix3 &rCovariance,
+      kt_bool doPenalize = true,
+      kt_bool doRefineMatch = true);
 
   /**
    * Finds the best pose for the scan centering the search in the correlation grid
@@ -2012,6 +2040,9 @@ public:
   kt_bool RemoveNodeFromGraph(Vertex<LocalizedRangeScan> *);
   void AddScanToLocalizationBuffer(LocalizedRangeScan * pScan, Vertex<LocalizedRangeScan> * scan_vertex);
   void ClearLocalizationBuffer();
+
+  // TY added
+  kt_bool searchBestVertexInMap(LocalizedRangeScan *pScan, kt_bool addScanToLocalizationBuffer = false, Matrix3 *covariance = nullptr);
 
   /**
    * Returns all processed scans added to the mapper.

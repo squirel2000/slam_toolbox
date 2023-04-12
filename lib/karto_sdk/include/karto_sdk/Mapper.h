@@ -1384,14 +1384,13 @@ public:
     Pose2 & rMean, Matrix3 & rCovariance,
     kt_bool doPenalize = true,
     kt_bool doRefineMatch = true);
-  
+
   template <class T = LocalizedRangeScanVector>
-  kt_double tyMatchScan(
+  kt_double traverseMatchScan(
       LocalizedRangeScan *pScan,
       const T &rBaseScans,
       Pose2 &rMean, Matrix3 &rCovariance,
-      kt_bool doPenalize = true,
-      kt_bool doRefineMatch = true);
+      kt_bool doPenalize = true);
 
   /**
    * Finds the best pose for the scan centering the search in the correlation grid

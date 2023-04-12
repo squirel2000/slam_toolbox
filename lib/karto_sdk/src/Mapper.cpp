@@ -494,7 +494,7 @@ ScanMatcher * ScanMatcher::Create(
     return NULL;
   }
 
-  std::cout << "ScanMatcher()->Crate(" << searchSize << ", " << resolution << ", " << smearDeviation << ", " << rangeThreshold << std::endl;
+  std::cout << "ScanMatcher()::Crate(" << searchSize << ", " << resolution << ", " << smearDeviation << ", " << rangeThreshold << std::endl;
 
   assert(math::DoubleEqual(math::Round(searchSize / resolution), (searchSize / resolution)));
 
@@ -532,13 +532,12 @@ ScanMatcher * ScanMatcher::Create(
  * @param rMean output parameter of mean (best pose) of match
  * @param rCovariance output parameter of covariance of match
  * @param doPenalize whether to penalize matches further from the search center
- * @param doRefineMatch whether to do finer-grained matching if coarse match is good (default is true)
  * @return strength of response
  */
 template <class T>
-kt_double ScanMatcher::tyMatchScan(
+kt_double ScanMatcher::traverseMatchScan(
     LocalizedRangeScan *pScan, const T &rBaseScans, Pose2 &rMean,
-    Matrix3 &rCovariance, kt_bool doPenalize, kt_bool doRefineMatch)
+    Matrix3 &rCovariance, kt_bool doPenalize)
 {
   ///////////////////////////////////////
   // set scan pose to be center of grid
@@ -555,97 +554,46 @@ kt_double ScanMatcher::tyMatchScan(
     // maximum covariance
     rCovariance(0, 0) = MAX_VARIANCE; // XX = 500
     rCovariance(1, 1) = MAX_VARIANCE; // YY
-    rCovariance(2, 2) =
-        4 * math::Square(m_pMapper->m_pCoarseAngleResolution->GetValue()); // TH*TH
+    rCovariance(2, 2) = 4 * math::Square(m_pMapper->m_pCoarseAngleResolution->GetValue()); // TH*TH
 
     return 0.0;
   }
 
-  // 2. get size of grid
+  // 2. get size of grid: roi: (x, y) = (21, 21), (width, height) = (4051, 4051); resolution = 0.01
   Rectangle2<kt_int32s> roi = m_pCorrelationGrid->GetROI();
-  // TODO: How to calculate the ROI of the grid? roi: (x, y) = (21, 21), (width, height) = (4051, 4051); resolution = 0.01
 
   // 3. compute offset (in meters - lower left corner)
   Vector2<kt_double> offset;
-  offset.SetX(scanPose.GetX() - (0.5 * (roi.GetWidth() - 1) * m_pCorrelationGrid->GetResolution()));  // TODO: Why multiple 0.5
+  offset.SetX(scanPose.GetX() - (0.5 * (roi.GetWidth() - 1) * m_pCorrelationGrid->GetResolution()));  
   offset.SetY(scanPose.GetY() - (0.5 * (roi.GetHeight() - 1) * m_pCorrelationGrid->GetResolution())); // -0.5 - (0.5 * (4051 - 1) * 0.01) ) = -80.25
 
   // 4. set offset
   m_pCorrelationGrid->GetCoordinateConverter()->SetOffset(offset); // GetOffset(): (-22.074, -21.04)
-  // std::cout << "\nMatchScan(): BaseScans.size(): " << rBaseScans.size() << "; scanPose(" << scanPose.GetPosition() << std::endl; // -21.814 -20.75
 
   ///////////////////////////////////////
 
   // set up correlation grid
   AddScans(rBaseScans, scanPose.GetPosition());
 
-  // compute how far to search in each direction, SearchDimensions: 101 101; coarseSearchOffset: 0.5 0.5; coarseSearchResolution: 0.10 0.10
+  // compute how far to search in each direction, SearchDimensions: 101 101; traverseSearchOffset: 0.5 0.5; traverseSearchResolution: 0.10 0.10
   Vector2<kt_double> searchDimensions(m_pSearchSpaceProbs->GetWidth(), m_pSearchSpaceProbs->GetHeight()); // 101, 101
-  Vector2<kt_double> coarseSearchOffset(0.5 * (searchDimensions.GetX() - 1) * m_pCorrelationGrid->GetResolution(),
-                                        0.5 * (searchDimensions.GetY() - 1) * m_pCorrelationGrid->GetResolution()); // 0.5 * (101-1) * 0.01 = 0.5
+  Vector2<kt_double> traverseSearchOffset(0.5 * (searchDimensions.GetX() - 1) * m_pCorrelationGrid->GetResolution(),
+                                          0.5 * (searchDimensions.GetY() - 1) * m_pCorrelationGrid->GetResolution()); // 0.5 * (101-1) * 0.01 = 0.5
 
-  // a coarse search only checks half the cells in each dimension, m_pCorrelationGrid->GetResolution() = 0.01
-  Vector2<kt_double> coarseSearchResolution(5 * m_pCorrelationGrid->GetResolution() * 2,
-                                            5 * m_pCorrelationGrid->GetResolution() * 2); // 5 * 0.01 * 2 = 0.10
+  // a traversal search only checks half the cells in each dimension, m_pCorrelationGrid->GetResolution() = 0.01
+  Vector2<kt_double> traverseSearchResolution(5 * m_pCorrelationGrid->GetResolution() * 2,
+                                              5 * m_pCorrelationGrid->GetResolution() * 2); // 5 * 0.01 * 2 = 0.10
+
+  // Offset: 0.349 * 9 = 3.141 rad = 180 degrees;   Resolution: 0.0349 * 2.5 = 0.08726 rad = 5 degrees;
+  kt_double traverseSearchAngleOffset = m_pMapper->m_pCoarseSearchAngleOffset->GetValue() * 9;
+  kt_double traverseSearchAngleResolution = m_pMapper->m_pCoarseAngleResolution->GetValue() * 2.5;
 
   // actual scan-matching
-  // kt_double bestResponse = CorrelateScan(pScan, scanPose, coarseSearchOffset,
-  //                                        coarseSearchResolution,
-  //                                        m_pMapper->m_pCoarseSearchAngleOffset->GetValue(),
-  //                                        m_pMapper->m_pCoarseAngleResolution->GetValue(),
-  //                                        doPenalize, rMean, rCovariance, false);
-  kt_double bestResponse = CorrelateScan(pScan, scanPose, coarseSearchOffset,
-                                         coarseSearchResolution,
-                                         m_pMapper->m_pCoarseSearchAngleOffset->GetValue() * 8, // 0.349 * 8 = 2.792 rad = 160 degrees
-                                         m_pMapper->m_pCoarseAngleResolution->GetValue() * 2.5,   // 0.0349 * 2.5 = 0.08726 rad = 5 degrees
+  kt_double bestResponse = CorrelateScan(pScan, scanPose,
+                                         traverseSearchOffset, traverseSearchResolution,
+                                         traverseSearchAngleOffset, traverseSearchAngleResolution, 
                                          doPenalize, rMean, rCovariance, false);
-                                         
-//   if (m_pMapper->m_pUseResponseExpansion->GetValue() == true)
-//   {
-//     if (math::DoubleEqual(bestResponse, 0.0))
-//     {
-// #ifdef KARTO_DEBUG
-//       std::cout << "Mapper Info: Expanding response search space!" << std::endl;
-// #endif
-//       // try and increase search angle offset with 20 degrees and do another match
-//       kt_double newSearchAngleOffset = m_pMapper->m_pCoarseSearchAngleOffset->GetValue();
-//       for (kt_int32u i = 0; i < 3; i++)
-//       {
-//         newSearchAngleOffset += math::DegreesToRadians(20);
 
-//         bestResponse = CorrelateScan(pScan, scanPose, coarseSearchOffset, coarseSearchResolution,
-//                                      newSearchAngleOffset, m_pMapper->m_pCoarseAngleResolution->GetValue(),
-//                                      doPenalize, rMean, rCovariance, false); //  doRefineMatch == false
-
-//         if (math::DoubleEqual(bestResponse, 0.0) == false)
-//         {
-//           break;
-//         }
-//       }
-
-// #ifdef KARTO_DEBUG
-//       if (math::DoubleEqual(bestResponse, 0.0))
-//       {
-//         std::cout << "Mapper Warning: Unable to calculate response!" << std::endl;
-//       }
-// #endif
-//     }
-//   }
-
-  if (doRefineMatch)
-  {
-    Vector2<kt_double> fineSearchOffset(coarseSearchResolution * 0.5); // 0.02 * 0.5 = 0.01
-    Vector2<kt_double> fineSearchResolution(m_pCorrelationGrid->GetResolution(),
-                                            m_pCorrelationGrid->GetResolution()); // 0.01
-    bestResponse = CorrelateScan(pScan, rMean, fineSearchOffset, fineSearchResolution,
-                                 0.5 * m_pMapper->m_pCoarseAngleResolution->GetValue(), // 0.00349
-                                 m_pMapper->m_pFineSearchAngleOffset->GetValue(),       // 0.01745
-                                 doPenalize, rMean, rCovariance, true);                 //  doRefineMatch == true
-  }
-
-#ifdef KARTO_DEBUG
-  std::cout << "  BEST POSE = " << rMean << " BEST RESPONSE = " << bestResponse << ",  VARIANCE = " << rCovariance(0, 0) << ", " << rCovariance(1, 1) << std::endl;
-#endif
   assert(math::InRange(rMean.GetHeading(), -KT_PI, KT_PI));
 
   return bestResponse;
@@ -695,32 +643,31 @@ kt_double ScanMatcher::MatchScan(
   offset.SetX(scanPose.GetX() - (0.5 * (roi.GetWidth() - 1) * m_pCorrelationGrid->GetResolution()));  // TODO: Why multiple 0.5
   offset.SetY(scanPose.GetY() - (0.5 * (roi.GetHeight() - 1) * m_pCorrelationGrid->GetResolution())); // -0.5 - (0.5 * (4051 - 1) * 0.01) ) = -80.25
 
-  // 4. set offset
-  m_pCorrelationGrid->GetCoordinateConverter()->SetOffset(offset);  // GetOffset(): (-22.074, -21.04)
-  // std::cout << "\nMatchScan(): BaseScans.size(): " << rBaseScans.size() << "; scanPose(" << scanPose.GetPosition() << std::endl; // -21.814 -20.75
+  // 4. set offset (-22.074, -21.04)
+  m_pCorrelationGrid->GetCoordinateConverter()->SetOffset(offset);
 
   ///////////////////////////////////////
 
   // set up correlation grid
   AddScans(rBaseScans, scanPose.GetPosition());
 
-  // compute how far to search in each direction, SearchDimensions: 51 51; coarseSearchOffset: 0.25 0.25; coarseSearchResolution: 0.02 0.02
-  Vector2<kt_double> searchDimensions(m_pSearchSpaceProbs->GetWidth(),
-    m_pSearchSpaceProbs->GetHeight());
-  Vector2<kt_double> coarseSearchOffset(0.5 * (searchDimensions.GetX() - 1) *
-    m_pCorrelationGrid->GetResolution(),
-    0.5 * (searchDimensions.GetY() - 1) * m_pCorrelationGrid->GetResolution());
+  // compute how far to search in each direction, SearchDimensions: 51 51; coarseSearchOffset: 0.25 0.25;
+  Vector2<kt_double> searchDimensions(0.5 * m_pSearchSpaceProbs->GetWidth(), 0.5 * m_pSearchSpaceProbs->GetHeight());
+  Vector2<kt_double> coarseSearchOffset(0.5 * (math::Round(searchDimensions.GetX()) - 1) * m_pCorrelationGrid->GetResolution(),
+                                        0.5 * (math::Round(searchDimensions.GetY()) - 1) * m_pCorrelationGrid->GetResolution());
 
-  // a coarse search only checks half the cells in each dimension
-  Vector2<kt_double> coarseSearchResolution(2 * m_pCorrelationGrid->GetResolution(),
-    2 * m_pCorrelationGrid->GetResolution());
+  // a coarse search only checks half the cells in each dimension (0.02, 0.02)
+  Vector2<kt_double> coarseSearchResolution(2 * m_pCorrelationGrid->GetResolution(), 2 * m_pCorrelationGrid->GetResolution());
+
+  // Offset: 0.349 = 20 degrees;   Resolution: 0.0349 = 2 degrees;
+  kt_double coarseSearchAngleOffset = m_pMapper->m_pCoarseSearchAngleOffset->GetValue();
+  kt_double coarseSearchAngleResolution = m_pMapper->m_pCoarseAngleResolution->GetValue();
 
   // actual scan-matching
-  kt_double bestResponse = CorrelateScan(pScan, scanPose, coarseSearchOffset,
-      coarseSearchResolution,
-      m_pMapper->m_pCoarseSearchAngleOffset->GetValue(),
-      m_pMapper->m_pCoarseAngleResolution->GetValue(),
-      doPenalize, rMean, rCovariance, false);
+  kt_double bestResponse = CorrelateScan(pScan, scanPose,
+                                         coarseSearchOffset, coarseSearchResolution,
+                                         coarseSearchAngleOffset, coarseSearchAngleResolution,
+                                         doPenalize, rMean, rCovariance, false);
 
   if (m_pMapper->m_pUseResponseExpansion->GetValue() == true) {
     if (math::DoubleEqual(bestResponse, 0.0)) {
@@ -751,12 +698,14 @@ kt_double ScanMatcher::MatchScan(
 
   if (doRefineMatch) {
     Vector2<kt_double> fineSearchOffset(coarseSearchResolution * 0.5);  // 0.02 * 0.5 = 0.01
-    Vector2<kt_double> fineSearchResolution(m_pCorrelationGrid->GetResolution(),
-                                            m_pCorrelationGrid->GetResolution()); // 0.01
-    bestResponse = CorrelateScan(pScan, rMean, fineSearchOffset, fineSearchResolution,
-                                 0.5 * m_pMapper->m_pCoarseAngleResolution->GetValue(), // 0.00349
-                                 m_pMapper->m_pFineSearchAngleOffset->GetValue(), // 0.01745
-                                 doPenalize, rMean, rCovariance, true); //  doRefineMatch == true
+    Vector2<kt_double> fineSearchResolution(m_pCorrelationGrid->GetResolution(),                                            m_pCorrelationGrid->GetResolution()); // 0.01
+    // Offset: 0.01745 = 1 degrees;   Resolution: 0.00349 = 0.2 degrees;
+    kt_double fineSearchAngleOffset = 0.5 * m_pMapper->m_pCoarseAngleResolution->GetValue();
+    kt_double fineSearchAngleResolution = m_pMapper->m_pFineSearchAngleOffset->GetValue();  // TODO: Rename the "Offset" as Resolution
+    bestResponse = CorrelateScan(pScan, rMean,
+                                 fineSearchOffset, fineSearchResolution,
+                                 fineSearchAngleOffset, fineSearchAngleResolution,
+                                 doPenalize, rMean, rCovariance, true);            //  doRefineMatch == true
   }
 
 #ifdef KARTO_DEBUG
@@ -847,15 +796,6 @@ kt_double ScanMatcher::CorrelateScan(
 {
   assert(searchAngleResolution != 0.0);
 
-#ifdef MAPPER_DEBUG
-  std::cout << "### CorrelateScan() ###" <<  std::endl;
-  std::cout << "doRefineMatch: " << doingFineMatch << std::endl;
-  std::cout << "rSearchCenter: " << rSearchCenter                                                      // -1.564, -0.5, 0
-            << "; rOffset: " << rSearchSpaceOffset << "; rResolution: " << rSearchSpaceResolution // (0.25, 0.25), (0.02, 0.02)
-            << "; aOffset: " << searchAngleOffset << "; aResolution: " << searchAngleResolution                         // 0.349 rad (20 deg), 0.0349 rad
-            << "; Penalize: " << doPenalize << "; doFineMatch: " << doingFineMatch << std::endl;                        // 1, 0
-#endif
-
   // setup lookup arrays (Note that "rSearchCenter" is only used for "angle" )
   m_pGridLookup->ComputeOffsets(pScan,
     rSearchCenter.GetHeading(), searchAngleOffset, searchAngleResolution);
@@ -895,9 +835,12 @@ kt_double ScanMatcher::CorrelateScan(
 
   
 #ifdef MAPPER_DEBUG
-  std::cout << "startX: " << startX << "; xSizes: " << m_xPoses.size() << "; startY: " << startY << "; ySizes: " << m_yPoses.size() << std::endl;
-  std::cout << "searchAngleOffset: " << searchAngleOffset << "; searchAngleResolution:" << searchAngleResolution << "; nAngles: " << nAngles << std::endl; // 21, 0.349, 0.0349
-  std::cout << "poseResponseSize: " << poseResponseSize << std::endl; // 14196 = 26 * 26 *21
+  std::cout << "### CorrelateScan() ###" << std::endl;
+  std::cout << "pScan(Sensor): " << pScan->GetSensorPose()                                        // -1.564, -0.5, 0
+            << "; rOffset: " << rSearchSpaceOffset << "; rResolution: " << rSearchSpaceResolution // (0.25, 0.25), (0.02, 0.02)
+            << "; aOffset: " << searchAngleOffset << "; aResolution: " << searchAngleResolution   // 0.349 rad (20 deg), 0.0349 rad
+            << "; Penalize: " << doPenalize << "; doFineMatch: " << doingFineMatch << std::endl;  // 1, 0
+  std::cout << "Size: " << m_xPoses.size() << " x " << m_yPoses.size() << " x " << nAngles << " = " << poseResponseSize << std::endl; // 14196 = 26 * 26 *21
 #endif
 
   // allocate array
@@ -2943,9 +2886,8 @@ kt_bool Mapper::searchBestVertexInMap(LocalizedRangeScan *pScan, kt_bool addScan
     kt_double best_strength = 0.0;
     for (Vertex<LocalizedRangeScan> *vertex : vertices_to_search)  {
       LocalizedRangeScan *pLastScan = NULL;
-      if (vertex)      {
-        pLastScan = m_pMapperSensorManager->GetScan(pScan->GetSensorName(),
-                                                    vertex->GetObject()->GetStateId());
+      if (vertex) {
+        pLastScan = m_pMapperSensorManager->GetScan(pScan->GetSensorName(), vertex->GetObject()->GetStateId());
         m_pMapperSensorManager->ClearRunningScans(pScan->GetSensorName());
         m_pMapperSensorManager->AddRunningScan(pLastScan);
         m_pMapperSensorManager->SetLastScan(pLastScan);
@@ -2955,9 +2897,9 @@ kt_bool Mapper::searchBestVertexInMap(LocalizedRangeScan *pScan, kt_bool addScan
       if (m_pUseScanMatching->GetValue() && pLastScan != NULL)  {
         cov.SetToIdentity();
         Pose2 local_best_pose; // The best pose indicates the sensor pose
-        kt_double strength = m_pSequentialScanMatcher->tyMatchScan(pScan,
-                                                                   m_pMapperSensorManager->GetRunningScans(pScan->GetSensorName()),
-                                                                   local_best_pose, cov, true, false);
+        kt_double strength = m_pSequentialScanMatcher->traverseMatchScan(
+            pScan, m_pMapperSensorManager->GetRunningScans(pScan->GetSensorName()),
+            local_best_pose, cov, true);
 
         // Pick the pose with the highest strength
         if (strength > best_strength) {
@@ -3007,21 +2949,18 @@ kt_bool Mapper::searchBestVertexInMap(LocalizedRangeScan *pScan, kt_bool addScan
     cov.SetToIdentity();
 
     // correct scan (if not first scan)
-    if (m_pUseScanMatching->GetValue() && pScan != NULL)  // if (m_pUseScanMatching->GetValue() && pLastScan != NULL)
-    {
+    if (m_pUseScanMatching->GetValue() && pScan != NULL) {
       Pose2 bestPose; // The best pose indicates the sensor pose
-      kt_double strength = m_pSequentialScanMatcher->MatchScan(pScan,
-                                                               m_pMapperSensorManager->GetRunningScans(pScan->GetSensorName()),
-                                                               bestPose,
-                                                               cov);
+      kt_double strength = m_pSequentialScanMatcher->MatchScan(
+          pScan, m_pMapperSensorManager->GetRunningScans(pScan->GetSensorName()),
+          bestPose, cov);
       pScan->SetSensorPose(bestPose);
 
       std::cout << "Best pose (Sensor Pose) = " << strength << " : " << bestPose << " ; pScan(CorrectedPose): " << pScan->GetCorrectedPose() << std::endl;
     }
     pScan->SetOdometricPose(pScan->GetCorrectedPose());
 
-    if (covariance)
-    {
+    if (covariance) {
       *covariance = cov;
     }
 
@@ -3032,11 +2971,9 @@ kt_bool Mapper::searchBestVertexInMap(LocalizedRangeScan *pScan, kt_bool addScan
     if (m_pUseScanMatching->GetValue())
     {
       // add the vertex (pScan) and edges to graph, and perform MatchScan() to estimate the best pose, and set the pose to pScan
-      std::cout << "\nAddVertex(), and AddEdges() performing ScanMatch() " << std::endl;
       scan_vertex = m_pGraph->AddVertex(pScan);
       m_pGraph->AddEdges(pScan, cov);
-      std::cout << "AddEdges() -> pScan(   SensorPose): " << pScan->GetSensorPose() << std::endl;
-      std::cout << "AddEdges() -> pScan(CorrectedPose): " << pScan->GetCorrectedPose() << std::endl;
+      std::cout << "AddEdges() -> pScan(   SensorPose): " << pScan->GetSensorPose() << "; pScan(CorrectedPose): " << pScan->GetCorrectedPose() << std::endl;
       m_pMapperSensorManager->AddRunningScan(pScan);
 
       if (m_pDoLoopClosing->GetValue())
@@ -3052,8 +2989,7 @@ kt_bool Mapper::searchBestVertexInMap(LocalizedRangeScan *pScan, kt_bool addScan
 
     m_pMapperSensorManager->SetLastScan(pScan);
 
-    if (addScanToLocalizationBuffer)
-    {
+    if (addScanToLocalizationBuffer) {
       AddScanToLocalizationBuffer(pScan, scan_vertex);
     }
     return true;

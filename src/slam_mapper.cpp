@@ -313,12 +313,12 @@ void SMapper::configure(const rclcpp::Node::SharedPtr & node)
   node->get_parameter("angle_variance_penalty", angle_variance_penalty);
   mapper_->setParamAngleVariancePenalty(angle_variance_penalty);
 
-  double fine_search_angle_offset = 0.00349;
-  if (!node->has_parameter("fine_search_angle_offset")) {
-    node->declare_parameter("fine_search_angle_offset", fine_search_angle_offset);
+  double fine_search_angle_resolution = 0.00349;
+  if (!node->has_parameter("fine_search_angle_resolution")) {
+    node->declare_parameter("fine_search_angle_resolution", fine_search_angle_resolution);
   }
-  node->get_parameter("fine_search_angle_offset", fine_search_angle_offset);
-  mapper_->setParamFineSearchAngleOffset(fine_search_angle_offset);
+  node->get_parameter("fine_search_angle_resolution", fine_search_angle_resolution);
+  mapper_->setParamFineSearchAngleResolution(fine_search_angle_resolution);
 
   double coarse_search_angle_offset = 0.349;
   if (!node->has_parameter("coarse_search_angle_offset")) {

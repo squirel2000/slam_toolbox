@@ -309,7 +309,7 @@ The following settings and options are exposed to you. My default configuration 
 
 `angle_variance_penalty` - A penalty to apply to a matched scan as it differs from the odometric pose
 
-`fine_search_angle_offset` - Range of angles to test for fine scan matching
+`fine_search_angle_resolution` - Resolution of angles over the offset range to test for fine scan matching
 
 `coarse_search_angle_offset` - Range of angles to test for coarse scan matching
 

@@ -48,7 +48,7 @@ namespace karto
 
 // enable this for verbose debug information
 // #define KARTO_DEBUG
-#define MAPPER_DEBUG
+// #define MAPPER_DEBUG
 
   #define MAX_VARIANCE            500.0
   #define DISTANCE_PENALTY_GAIN   0.2
@@ -494,8 +494,6 @@ ScanMatcher * ScanMatcher::Create(
     return NULL;
   }
 
-  std::cout << "ScanMatcher()::Crate(" << searchSize << ", " << resolution << ", " << smearDeviation << ", " << rangeThreshold << std::endl;
-
   assert(math::DoubleEqual(math::Round(searchSize / resolution), (searchSize / resolution)));
 
   // calculate search space in grid coordinates, e.g. (0.5 / 0.01) + 1 = 51
@@ -701,7 +699,7 @@ kt_double ScanMatcher::MatchScan(
     Vector2<kt_double> fineSearchResolution(m_pCorrelationGrid->GetResolution(),                                            m_pCorrelationGrid->GetResolution()); // 0.01
     // Offset: 0.01745 = 1 degrees;   Resolution: 0.00349 = 0.2 degrees;
     kt_double fineSearchAngleOffset = 0.5 * m_pMapper->m_pCoarseAngleResolution->GetValue();
-    kt_double fineSearchAngleResolution = m_pMapper->m_pFineSearchAngleOffset->GetValue();  // TODO: Rename the "Offset" as Resolution
+    kt_double fineSearchAngleResolution = m_pMapper->m_pFineSearchAngleResolution->GetValue();  // TODO: Rename the "Offset" as Resolution
     bestResponse = CorrelateScan(pScan, rMean,
                                  fineSearchOffset, fineSearchResolution,
                                  fineSearchAngleOffset, fineSearchAngleResolution,
@@ -828,9 +826,7 @@ kt_double ScanMatcher::CorrelateScan(
   assert(math::DoubleEqual(m_yPoses.back(), -startY));
 
   // calculate pose response array size
-  kt_int32u nAngles =
-    static_cast<kt_int32u>(math::Round(searchAngleOffset * 2.0 / searchAngleResolution) + 1);
-
+  kt_int32u nAngles = static_cast<kt_int32u>(math::Round(searchAngleOffset * 2.0 / searchAngleResolution) + 1);
   kt_int32u poseResponseSize = static_cast<kt_int32u>(m_xPoses.size() * m_yPoses.size() * nAngles); // 14196 = 26 * 26 *21
 
   
@@ -1524,7 +1520,7 @@ void MapperGraph::AddEdges(LocalizedRangeScan * pScan, const Matrix3 & rCovarian
 
   const Name rSensorName = pScan->GetSensorName();
 
-  std::cout << "AddEdges() -> pScan->GetStateId(): " << pScan->GetStateId() << std::endl;
+  // std::cout << "AddEdges() -> pScan->GetStateId(): " << pScan->GetStateId() << std::endl;
 
   // link to previous scan
   kt_int32s previousScanNum = pScan->GetStateId() - 1;
@@ -1556,7 +1552,6 @@ void MapperGraph::AddEdges(LocalizedRangeScan * pScan, const Matrix3 & rCovarian
         continue;
       }
 
-      std::cout << "AddEdges() -> LinkScans(), rCandidateSensorName: " << rCandidateSensorName << std::endl;
       Pose2 bestPose;
       Matrix3 covariance;
       kt_double response = m_pMapper->m_pSequentialScanMatcher->MatchScan<LocalizedRangeScanMap>(
@@ -1582,17 +1577,10 @@ void MapperGraph::AddEdges(LocalizedRangeScan * pScan, const Matrix3 & rCovarian
   // link to other near chains (chains that include new scan are invalid)
   LinkNearChains(pScan, means, covariances);
   
-  std::cout << "\nAddEdges() -> After LinkNearChains(): " << pScan->GetSensorPose() << std::endl;
   // pScan->SetSensorPose(means.back());
   if (!means.empty()) {
-    std::cout << "pScan: " << pScan->GetSensorPose() << std::endl;
-    for (const Pose2 & pose : means) {
-      std::cout << "means: " << pose << std::endl;
-    }
-    // TODO: Why the pScan is not updated to the newest one?
     pScan->SetSensorPose(ComputeWeightedMean(means, covariances));
   }
-  std::cout << "\nAddEdges() -> computeWeightedMean(): " << pScan->GetSensorPose() << std::endl;
 }
 
 kt_bool MapperGraph::TryCloseLoop(LocalizedRangeScan * pScan, const Name & rSensorName)
@@ -1743,8 +1731,6 @@ void MapperGraph::LinkNearChains(
   std::vector<Matrix3> & rCovariances)
 {
   const std::vector<LocalizedRangeScanVector> nearChains = FindNearChains(pScan);
-
-  std::cout << "LinkNearChains() -> nearChains.size(): " << nearChains.size() << std::endl;
 
   const_forEach(std::vector<LocalizedRangeScanVector>, &nearChains)
   {
@@ -2369,8 +2355,8 @@ void Mapper::InitializeParameters()
     "See DistanceVariancePenalty.",
     math::Square(math::DegreesToRadians(20)), GetParameterManager());
 
-  m_pFineSearchAngleOffset = new Parameter<kt_double>(
-    "FineSearchAngleOffset",
+  m_pFineSearchAngleResolution = new Parameter<kt_double>(
+    "FineSearchAngleResolution",
     "The range of angles to search during a fine search.",
     math::DegreesToRadians(0.2), GetParameterManager());
 
@@ -2527,9 +2513,9 @@ double Mapper::getParamAngleVariancePenalty()
   return std::sqrt(static_cast<double>(m_pAngleVariancePenalty->GetValue()));
 }
 
-double Mapper::getParamFineSearchAngleOffset()
+double Mapper::getParamFineSearchAngleResolution()
 {
-  return static_cast<double>(m_pFineSearchAngleOffset->GetValue());
+  return static_cast<double>(m_pFineSearchAngleResolution->GetValue());
 }
 
 double Mapper::getParamCoarseSearchAngleOffset()
@@ -2679,9 +2665,9 @@ void Mapper::setParamAngleVariancePenalty(double d)
   m_pAngleVariancePenalty->SetValue((kt_double)math::Square(d));
 }
 
-void Mapper::setParamFineSearchAngleOffset(double d)
+void Mapper::setParamFineSearchAngleResolution(double d)
 {
-  m_pFineSearchAngleOffset->SetValue((kt_double)d);
+  m_pFineSearchAngleResolution->SetValue((kt_double)d);
 }
 
 void Mapper::setParamCoarseSearchAngleOffset(double d)

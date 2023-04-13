@@ -2374,7 +2374,7 @@ protected:
   Parameter<kt_double> * m_pAngleVariancePenalty;
 
   // The range of angles to search during a coarse search and a finer search
-  Parameter<kt_double> * m_pFineSearchAngleOffset;
+  Parameter<kt_double> * m_pFineSearchAngleResolution;
   Parameter<kt_double> * m_pCoarseSearchAngleOffset;
 
   // Resolution of angles to search during a coarse search
@@ -2426,7 +2426,7 @@ protected:
     ar & BOOST_SERIALIZATION_NVP(m_pLoopSearchSpaceSmearDeviation);
     ar & BOOST_SERIALIZATION_NVP(m_pDistanceVariancePenalty);
     ar & BOOST_SERIALIZATION_NVP(m_pAngleVariancePenalty);
-    ar & BOOST_SERIALIZATION_NVP(m_pFineSearchAngleOffset);
+    ar & BOOST_SERIALIZATION_NVP(m_pFineSearchAngleResolution);
     ar & BOOST_SERIALIZATION_NVP(m_pCoarseSearchAngleOffset);
     ar & BOOST_SERIALIZATION_NVP(m_pCoarseAngleResolution);
     ar & BOOST_SERIALIZATION_NVP(m_pMinimumAnglePenalty);
@@ -2469,7 +2469,7 @@ public:
   // Scan Matcher Parameters
   double getParamDistanceVariancePenalty();
   double getParamAngleVariancePenalty();
-  double getParamFineSearchAngleOffset();
+  double getParamFineSearchAngleResolution();
   double getParamCoarseSearchAngleOffset();
   double getParamCoarseAngleResolution();
   double getParamMinimumAnglePenalty();
@@ -2507,7 +2507,7 @@ public:
   // Scan Matcher Parameters
   void setParamDistanceVariancePenalty(double d);
   void setParamAngleVariancePenalty(double d);
-  void setParamFineSearchAngleOffset(double d);
+  void setParamFineSearchAngleResolution(double d);
   void setParamCoarseSearchAngleOffset(double d);
   void setParamCoarseAngleResolution(double d);
   void setParamMinimumAnglePenalty(double d);

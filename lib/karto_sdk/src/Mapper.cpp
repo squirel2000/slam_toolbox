@@ -48,7 +48,7 @@ namespace karto
 
 // enable this for verbose debug information
 // #define KARTO_DEBUG
-// #define MAPPER_DEBUG
+#define MAPPER_DEBUG
 
   #define MAX_VARIANCE            500.0
   #define DISTANCE_PENALTY_GAIN   0.2
@@ -644,6 +644,7 @@ kt_double ScanMatcher::MatchScan(
   // 4. set offset (-22.074, -21.04)
   m_pCorrelationGrid->GetCoordinateConverter()->SetOffset(offset);
 
+  std::cout << "\nroi center: " << roi.GetCenter() << "; position: " << roi.GetPosition() << "; Size: " << roi.GetSize() << std::endl;
   ///////////////////////////////////////
 
   // set up correlation grid
@@ -696,7 +697,7 @@ kt_double ScanMatcher::MatchScan(
 
   if (doRefineMatch) {
     Vector2<kt_double> fineSearchOffset(coarseSearchResolution * 0.5);  // 0.02 * 0.5 = 0.01
-    Vector2<kt_double> fineSearchResolution(m_pCorrelationGrid->GetResolution(),                                            m_pCorrelationGrid->GetResolution()); // 0.01
+    Vector2<kt_double> fineSearchResolution(m_pCorrelationGrid->GetResolution(), m_pCorrelationGrid->GetResolution()); // 0.01
     // Offset: 0.01745 = 1 degrees;   Resolution: 0.00349 = 0.2 degrees;
     kt_double fineSearchAngleOffset = 0.5 * m_pMapper->m_pCoarseAngleResolution->GetValue();
     kt_double fineSearchAngleResolution = m_pMapper->m_pFineSearchAngleResolution->GetValue();  // TODO: Rename the "Offset" as Resolution
@@ -803,7 +804,7 @@ kt_double ScanMatcher::CorrelateScan(
     m_pSearchSpaceProbs->Clear();
 
     // position search grid - finds lower left corner of search grid
-    Vector2<kt_double> offset(rSearchCenter.GetPosition() - rSearchSpaceOffset);
+    Vector2<kt_double> offset(rSearchCenter.GetPosition() - rSearchSpaceOffset); // (-1.13757 -0.773566) - (0.25 0.25) = (-1.38757 -1.02357)
     m_pSearchSpaceProbs->GetCoordinateConverter()->SetOffset(offset);
   }
 
@@ -817,8 +818,7 @@ kt_double ScanMatcher::CorrelateScan(
   assert(math::DoubleEqual(m_xPoses.back(), -startX));
 
   m_yPoses.clear();
-  kt_int32u nY = static_cast<kt_int32u>(math::Round(rSearchSpaceOffset.GetY() *
-    2.0 / rSearchSpaceResolution.GetY()) + 1);
+  kt_int32u nY = static_cast<kt_int32u>(math::Round(rSearchSpaceOffset.GetY() *    2.0 / rSearchSpaceResolution.GetY()) + 1);
   kt_double startY = -rSearchSpaceOffset.GetY();
   for (kt_int32u yIndex = 0; yIndex < nY; yIndex++) {
     m_yPoses.push_back(startY + yIndex * rSearchSpaceResolution.GetY());
@@ -842,9 +842,8 @@ kt_double ScanMatcher::CorrelateScan(
   // allocate array
   m_pPoseResponse = new std::pair<kt_double, Pose2>[poseResponseSize];
 
-  Vector2<kt_int32s> startGridPoint =
-    m_pCorrelationGrid->WorldToGrid(Vector2<kt_double>(rSearchCenter.GetX() +
-      startX, rSearchCenter.GetY() + startY));  // -1.560 + (-0.25), -0.5 + (-0.25),
+  Vector2<kt_int32s> startGridPoint = m_pCorrelationGrid->WorldToGrid(Vector2<kt_double>(rSearchCenter.GetX() + startX, rSearchCenter.GetY() + startY)); // -1.560 + (-0.25), -0.5 + (-0.25),
+  // std::cout << "Start Grid Point: " << startGridPoint << "; rSerachCenter: " << rSearchCenter << "; start(" << startX << ", " << startY << ")" << std::endl;
 
   // this isn't good but its the fastest way to iterate. Should clean up later.
   m_rSearchCenter = rSearchCenter;
@@ -852,7 +851,7 @@ kt_double ScanMatcher::CorrelateScan(
   m_nAngles = nAngles;
   m_searchAngleResolution = searchAngleResolution;
   m_doPenalize = doPenalize;
-  tbb::parallel_for_each(m_yPoses, (*this)); // TODO: Calculate at this time??? -> ScanMatcher::operator()(const kt_double & y)
+  tbb::parallel_for_each(m_yPoses, (*this)); // -> ScanMatcher::operator()(const kt_double & y)
 
   // find value of best response (in [0; 1])
   kt_double bestResponse = -1;
@@ -1586,8 +1585,8 @@ void MapperGraph::AddEdges(LocalizedRangeScan * pScan, const Matrix3 & rCovarian
 kt_bool MapperGraph::TryCloseLoop(LocalizedRangeScan * pScan, const Name & rSensorName)
 {
 
-  std::cout << std::endl;
-  std::cout << "TryCloseLoop(): " << rSensorName << std::endl;
+  // std::cout << std::endl;
+  // std::cout << "TryCloseLoop(): " << rSensorName << std::endl;
 
   kt_bool loopClosed = false;
 
@@ -1744,13 +1743,12 @@ void MapperGraph::LinkNearChains(
     kt_double response = m_pMapper->m_pSequentialScanMatcher->MatchScan(pScan, *iter, mean, covariance, false);
     pScan->SetSensorPose(mean);
 
-    std::cout << "LinkNearChains() after MatchScan: pScan(): " << pScan->GetSensorPose() << std::endl;
     if (response > m_pMapper->m_pLinkMatchMinimumResponseFine->GetValue() - KT_TOLERANCE) { // KT_TOLERANCE = 1e-06
       rMeans.push_back(mean);
       rCovariances.push_back(covariance);
       LinkChainToScan(*iter, pScan, mean, covariance);
     }
-    std::cout << "LinkNearChains() after LinkChainToScan: pScan(): " << pScan->GetSensorPose() << std::endl;
+    // std::cout << "LinkNearChains() after LinkChainToScan: pScan(): " << pScan->GetSensorPose() << std::endl;
   }
 }
 
@@ -2873,6 +2871,7 @@ kt_bool Mapper::searchBestVertexInMap(LocalizedRangeScan *pScan, kt_bool addScan
     for (Vertex<LocalizedRangeScan> *vertex : vertices_to_search)  {
       LocalizedRangeScan *pLastScan = NULL;
       if (vertex) {
+        pScan->SetSensorPose( vertex->GetObject()->GetSensorPose() );
         pLastScan = m_pMapperSensorManager->GetScan(pScan->GetSensorName(), vertex->GetObject()->GetStateId());
         m_pMapperSensorManager->ClearRunningScans(pScan->GetSensorName());
         m_pMapperSensorManager->AddRunningScan(pLastScan);
@@ -2942,7 +2941,7 @@ kt_bool Mapper::searchBestVertexInMap(LocalizedRangeScan *pScan, kt_bool addScan
           bestPose, cov);
       pScan->SetSensorPose(bestPose);
 
-      std::cout << "Best pose (Sensor Pose) = " << strength << " : " << bestPose << " ; pScan(CorrectedPose): " << pScan->GetCorrectedPose() << std::endl;
+      // std::cout << "myMatchScan() Best pose (Sensor Pose) = " << strength << " : " << bestPose << " ; pScan(CorrectedPose): " << pScan->GetCorrectedPose() << std::endl;
     }
     pScan->SetOdometricPose(pScan->GetCorrectedPose());
 
@@ -3120,15 +3119,11 @@ kt_bool Mapper::ProcessLocalization(LocalizedRangeScan * pScan, Matrix3 * covari
 
   // correct scan (if not first scan)
   if (m_pUseScanMatching->GetValue() && pLastScan != NULL) {
-    std::cout << std::endl;
-    std::cout << "ProcessLocalization() in Mapper.cpp:" << std::endl;
     Pose2 bestPose;
     m_pSequentialScanMatcher->MatchScan(pScan,
       m_pMapperSensorManager->GetRunningScans(pScan->GetSensorName()),
       bestPose,
       cov);
-    
-    // std::cout << "ScanMatching strength: " << strength << std::endl;
 
     pScan->SetSensorPose(bestPose);
     if (covariance) {

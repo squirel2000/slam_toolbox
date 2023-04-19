@@ -568,7 +568,7 @@ bool SlamToolbox::shouldProcessScan(
     return false;
   }
 
-  // not enough time
+  // not enough time (Different from the HasMovedEnough() function)
   if (rclcpp::Time(scan->header.stamp) - last_scan_time < minimum_time_interval_) {
     return false;
   }
@@ -623,6 +623,10 @@ LocalizedRangeScan * SlamToolbox::addScan(
     processed = smapper_->getMapper()->ProcessAtDock(range_scan, &covariance);
     processor_type_ = PROCESS;
     update_reprocessing_transform = true;
+
+    RCLCPP_WARN(get_logger(), "PROCESS_FIRST_NODE");
+    std::cout << "range_scan: " << range_scan->GetSensorPose() << std::endl;
+
   } else if (processor_type_ == PROCESS_NEAR_REGION) {
     boost::mutex::scoped_lock l(pose_mutex_);
     if (!process_near_pose_) {
@@ -633,10 +637,16 @@ LocalizedRangeScan * SlamToolbox::addScan(
     range_scan->SetOdometricPose(*process_near_pose_);
     range_scan->SetCorrectedPose(range_scan->GetOdometricPose());
     process_near_pose_.reset(nullptr);
-    processed = smapper_->getMapper()->ProcessAgainstNodesNearBy(
-      range_scan, false, &covariance);
+
+    processed = smapper_->getMapper()->searchBestVertexInMap(range_scan, false, &covariance);
+    // processed = smapper_->getMapper()->ProcessAgainstNodesNearBy(range_scan, false, &covariance);
+
     update_reprocessing_transform = true;
     processor_type_ = PROCESS;
+
+    RCLCPP_WARN(get_logger(), "PROCESS_NEAR_REGION(%.3f, %.3f, %.3f)",
+                range_scan->GetCorrectedPose().GetX(), range_scan->GetCorrectedPose().GetY(), range_scan->GetCorrectedPose().GetHeading());
+
   } else {  // TODO: The type of PROCESS_LOCALIZATION is not implemented yet? -> declared in slam_toolbox_localization.cpp
     RCLCPP_FATAL(get_logger(),
       "SlamToolbox: No valid processor type set! Exiting.");

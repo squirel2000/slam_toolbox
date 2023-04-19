@@ -121,19 +121,19 @@ void LifelongSlamToolbox::evaluateNodeDepreciation(
     const BoundingBox2 & bb = range_scan->GetBoundingBox();
     const Size2<double> bb_size = bb.GetSize();
     double radius = sqrt(bb_size.GetWidth() * bb_size.GetWidth() +
-        bb_size.GetHeight() * bb_size.GetHeight()) / 2.0;
+                         bb_size.GetHeight() * bb_size.GetHeight()) / 2.0;
     Vertices near_scan_vertices = FindScansWithinRadius(range_scan, radius);
 
-    ScoredVertices scored_verices =
-      computeScores(near_scan_vertices, range_scan);
+    ScoredVertices scored_vertices =
+        computeScores(near_scan_vertices, range_scan);
 
     ScoredVertices::iterator it;
-    for (it = scored_verices.begin(); it != scored_verices.end(); ++it) {
+    for (it = scored_vertices.begin(); it != scored_vertices.end(); ++it) {
       if (it->GetScore() < removal_score_) {
         RCLCPP_DEBUG(get_logger(),
-          "Removing node %i from graph with score: %f and old score: %f.",
-          it->GetVertex()->GetObject()->GetUniqueId(),
-          it->GetScore(), it->GetVertex()->GetScore());
+                     "Removing node %i from graph with score: %f and old score: %f.",
+                     it->GetVertex()->GetObject()->GetUniqueId(),
+                     it->GetScore(), it->GetVertex()->GetScore());
         removeFromSlamGraph(it->GetVertex());
       } else {
         updateScoresSlamGraph(it->GetScore(), it->GetVertex());
@@ -249,9 +249,12 @@ double LifelongSlamToolbox::computeScore(
       initial_score,
       num_candidates);
 
+#ifdef KARTO_DEBUG
   RCLCPP_INFO(get_logger(), "Metric Scores: Initial: %f, IOU: %f,"
-    " Area: %f, Num Con: %i, Reading: %f, outcome score: %f.",
-    initial_score, iou, area_overlap, num_constraints, reading_overlap, score);
+                            " Area: %f, Num Con: %i, Reading: %f, outcome score: %f.",
+              initial_score, iou, area_overlap, num_constraints, reading_overlap, score);
+#endif
+
   return score;
 }
 

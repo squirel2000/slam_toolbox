@@ -3362,7 +3362,7 @@ kt_bool Mapper::HasMovedEnough(LocalizedRangeScan * pScan, LocalizedRangeScan * 
   // test if enough time has passed
   kt_double timeInterval = pScan->GetTime() - pLastScan->GetTime();
   if (timeInterval >= m_pMinimumTimeInterval->GetValue()) {
-    return true;
+    // return true; // Comment out for avoiding generating nodes periodically at the same pose
   }
 
   Pose2 lastScannerPose = pLastScan->GetSensorAt(pLastScan->GetOdometricPose());

@@ -104,6 +104,7 @@ protected:
     const karto::Pose2 & pose,
     const karto::Pose2 & karto_pose, const rclcpp::Time & t,
     const bool & update_reprocessing_transform);
+  // Convert the data format from scan to karto::LocalizedRangeScan with transformed pose
   karto::LocalizedRangeScan * getLocalizedRangeScan(
     karto::LaserRangeFinder * laser,
     const sensor_msgs::msg::LaserScan::ConstSharedPtr & scan,

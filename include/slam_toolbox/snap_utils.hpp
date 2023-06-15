@@ -24,10 +24,10 @@
 namespace snap_utils
 {
 
-// whether this is running in a snap container
+// Check if the application is running within a Snap environment by checking for the presence of the "SNAP_COMMON" environment variable.
 inline bool isInSnap()
 {
-  char * snap_common = getenv("SNAP_COMMON");
+  char* snap_common = getenv("SNAP_COMMON"); // fetches the value of an environment variable, "SNAP_COMMON"
   if (snap_common != NULL) {
     return true;
   }

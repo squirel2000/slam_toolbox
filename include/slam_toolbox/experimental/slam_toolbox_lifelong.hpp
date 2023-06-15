@@ -61,6 +61,14 @@ protected:
   double computeScore(
     LocalizedRangeScan * reference_scan, Vertex<LocalizedRangeScan> * candidate,
     const double & initial_score, const int & num_candidates);
+
+  /**
+ * @brief Compute the scores of the vertices around the current range_scan in the graph
+ *
+ * @param near_scans vertices around the current range_scan
+ * @param range_scan current range_scan
+ * @return ScoredVertices
+ */
   ScoredVertices computeScores(Vertices & near_scans, LocalizedRangeScan * range_scan);
   Vertices FindScansWithinRadius(LocalizedRangeScan * scan, const double & radius);
   void updateScoresSlamGraph(const double & score, Vertex<LocalizedRangeScan> * vertex);

@@ -31,8 +31,8 @@ slam_toolbox:
     # or at the dock, but they are mutually exclusive, if pose is given
     # will use pose
     map_file_name: /home/asus/colcon_ws/src/asus_amr/asus_vms/data/data04
-    map_start_pose: [1.0, 1.0, 0.0]
-    #map_start_at_dock: true  # default: false
+    map_start_pose: [1.0, 1.0, 0.0]             # srv::DeserializePoseGraph::Request::START_AT_GIVEN_POSE
+    #map_start_at_dock: true  # default: false  # srv::DeserializePoseGraph::Request::START_AT_FIRST_NODE
 
     debug_logging: false
     throttle_scans: 1

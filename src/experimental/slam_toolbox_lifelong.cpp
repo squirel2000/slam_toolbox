@@ -109,6 +109,7 @@ void LifelongSlamToolbox::laserCallback(
   // LTS if (eval() && dont_add_more_scans) {addScan()} else {localization_add_scan()}
   // LTS if (eval() && ctr / total < add_rate_scans) {addScan()} else {localization_add_scan()}
   LocalizedRangeScan * range_scan = addScan(laser, scan, pose);
+  // TODO: For the pose alignment after launch, Check if the strength of the initial localization is large enough
   evaluateNodeDepreciation(range_scan);
 }
 
@@ -120,14 +121,14 @@ void LifelongSlamToolbox::evaluateNodeDepreciation(
   if (range_scan) {
     boost::mutex::scoped_lock lock(smapper_mutex_);
 
-    const BoundingBox2 & bb = range_scan->GetBoundingBox(); // What's the bounding box
+    const BoundingBox2 & bb = range_scan->GetBoundingBox(); // bb: the max. scanning range of this range_scan 
     const Size2<double> bb_size = bb.GetSize();
-    double radius = sqrt(bb_size.GetWidth() * bb_size.GetWidth() +
-                         bb_size.GetHeight() * bb_size.GetHeight()) / 2.0;
-    Vertices near_scan_vertices = FindScansWithinRadius(range_scan, 1.0);
+    double radius = sqrt(bb_size.GetWidth() * bb_size.GetWidth() + bb_size.GetHeight() * bb_size.GetHeight()) / 2.0;  // hypotenuse of the bounding box / 2
+    Vertices near_scan_vertices = FindScansWithinRadius(range_scan, 1.0); // Limit the radius to 1.0 (m) instead of the radius of the bounding box
+    // -> bb_size: (20.5305, 16.353); radius: 13.1237; 9 vertices around 2.97644 0.992615 6.33001e-06
+    
     // Vertices near_scan_vertices = FindScansWithinRadius(range_scan, radius);
-
-    // bb_size is variable,  bb_size: (26.0209, 7.06083); radius: 13.4809; near_scan_vertices: 168
+    // -> bb_size is variable,  bb_size: (26.0209, 7.06083); radius: 13.4809; near_scan_vertices: 168
     std::cout << "bb_size: " << bb_size << "; radius: " << radius << "; " << near_scan_vertices.size() << " vertices around " << range_scan->GetCorrectedPose() << std::endl;
 
     ScoredVertices scored_vertices = computeScores(near_scan_vertices, range_scan);
@@ -176,12 +177,12 @@ Vertices LifelongSlamToolbox::FindScansWithinRadius(
 
 /*****************************************************************************/
 double LifelongSlamToolbox::computeObjectiveScore(
-  const double & intersect_over_union,
-  const double & area_overlap,
-  const double & reading_overlap,
-  const int & num_constraints,
-  const double & initial_score,
-  const int & num_candidates) const
+  const double& intersect_over_union,
+  const double& area_overlap,
+  const double& reading_overlap,
+  const int& num_constraints,   // candidate->GetEdges().size();
+  const double& initial_score,
+  const int& num_candidates) const  // near_scans.size()
 /*****************************************************************************/
 {
   // We have some useful metrics. lets make a new score
@@ -201,22 +202,21 @@ double LifelongSlamToolbox::computeObjectiveScore(
 
   // to be conservative, lets say the overlap is the lesser of the
   // area and proportion of laser returns in the intersecting region.
-  double overlap = overlap_scale_ * std::min(area_overlap, reading_overlap);
+  double overlap = overlap_scale_ * std::min(area_overlap, reading_overlap);  // overlap_scale_ = 0.06
 
   // if the num_constraints are high we want to stave off the decay, but not override it
   double contraint_scale_factor = std::min(1.0,
-      std::max(0., constraint_scale_ * (num_constraints - 2)));   // 0.08
+      std::max(0., constraint_scale_ * (num_constraints - 2)));   // constraint_scale_ = 0.08
   contraint_scale_factor = std::min(contraint_scale_factor, overlap);
 
   //
   double candidates = num_candidates - 1;
-  double candidate_scale_factor = candidates_scale_ * candidates; // 0.03
+  double candidate_scale_factor = candidates_scale_ * candidates; // candidates_scale_ = 0.03
 
   // Give the initial score a boost proportional to the number of constraints
   // Subtract the overlap amount, apply a penalty for just being nearby
   // and scale the entire additional score by the number of candidates
-  double score = initial_score * (1.0 + contraint_scale_factor) - overlap -
-                 nearby_penalty_;
+  double score = initial_score * (1.0 + contraint_scale_factor) - overlap - nearby_penalty_;  // nearby_penalty_ = 0.001
 
   // score += (initial_score - score) * candidate_scale_factor;
 
@@ -232,7 +232,7 @@ double LifelongSlamToolbox::computeObjectiveScore(
 
 /*****************************************************************************/
 double LifelongSlamToolbox::computeScore(
-  LocalizedRangeScan * reference_scan,
+  LocalizedRangeScan * reference_scan,  // the current range_scan
   Vertex<LocalizedRangeScan> * candidate,
   const double & initial_score, const int & num_candidates)
 /*****************************************************************************/
@@ -240,28 +240,28 @@ double LifelongSlamToolbox::computeScore(
   double new_score = initial_score;
   LocalizedRangeScan * candidate_scan = candidate->GetObject();
 
-  // compute metrics for information loss normalized
-  double iou = computeIntersectOverUnion(reference_scan, candidate_scan);
-  double area_overlap = computeAreaOverlapRatio(reference_scan, candidate_scan);
-  double reading_overlap = computeReadingOverlapRatio(reference_scan, candidate_scan);
-
+  // Exclude vertices: 1. the first two scans; 2. the latest 10 scans
   bool critical_lynchpoint = candidate_scan->GetUniqueId() == 0 || candidate_scan->GetUniqueId() == 1;
   int id_diff = reference_scan->GetUniqueId() - candidate_scan->GetUniqueId();
   if (id_diff < smapper_->getMapper()->getParamScanBufferSize() || critical_lynchpoint) {
     return initial_score;
   }
 
+  // compute metrics for information loss normalized
+  double iou = computeIntersectOverUnion(reference_scan, candidate_scan);
+  double area_overlap = computeAreaOverlapRatio(reference_scan, candidate_scan);
+  double reading_overlap = computeReadingOverlapRatio(reference_scan, candidate_scan);
+
   int num_constraints = candidate->GetEdges().size();
-  double score =
-      computeObjectiveScore(iou, area_overlap, reading_overlap, num_constraints,
-                            initial_score, num_candidates);
+  double score = computeObjectiveScore( iou, area_overlap, reading_overlap, num_constraints,
+                                        initial_score, num_candidates);
 
 #ifdef KARTO_DEBUG
   RCLCPP_INFO(get_logger(),
               "Metric Scores(%d): Initial: %.3f, IOU: %.3f,"
-              " Area: %.3f, Con: %i, Read: %.3f, score: %.3f @(%.3f, %.3f, %.3f)",
+              " Area: %.3f, Read: %.3f, Con: %i, score: %.3f @(%.3f, %.3f, %.3f)",
               candidate_scan->GetStateId(), initial_score,
-              iou, area_overlap, num_constraints, reading_overlap, score,
+              iou, area_overlap, reading_overlap,num_constraints, score,
               candidate_scan->GetCorrectedPose().GetX(),
               candidate_scan->GetCorrectedPose().GetY(),
               candidate_scan->GetCorrectedPose().GetHeading());
@@ -290,6 +290,10 @@ ScoredVertices LifelongSlamToolbox::computeScores(
   double iou = 0.0;
   for (candidate_scan_it = near_scans.begin(); candidate_scan_it != near_scans.end();)  {
     iou = computeIntersectOverUnion(range_scan, (*candidate_scan_it)->GetObject());
+
+    // Exclude the vertex if 
+    // 1. its IOU is too low (No overlap, that is it is essential for build the map); 
+    // 2. its linked constraint is low < 2, that is the vertex is only connected to the current range_scan vertex
     if (iou < iou_thresh_ || (*candidate_scan_it)->GetEdges().size() < 2) { // iou_thresh_ = lifelong_minimum_score = 0.10, TODO: Why not size() < 3?
       candidate_scan_it = near_scans.erase(candidate_scan_it);
 

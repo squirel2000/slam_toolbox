@@ -48,7 +48,7 @@ namespace karto
 
 // enable this for verbose debug information
 // #define KARTO_DEBUG
-#define MAPPER_DEBUG
+// #define MAPPER_DEBUG
 
   #define MAX_VARIANCE            500.0
   #define DISTANCE_PENALTY_GAIN   0.2
@@ -520,6 +520,9 @@ ScanMatcher * ScanMatcher::Create(
   pScanMatcher->m_pSearchSpaceProbs = pSearchSpaceProbs;
   pScanMatcher->m_pGridLookup = new GridIndexLookup<kt_int8u>(pCorrelationGrid);
 
+  std::cout << "Created ScanMatcher(): SearchSpaceProbs(" << pSearchSpaceProbs->GetHeight() << ", " << pSearchSpaceProbs->GetWidth() << ", " << pSearchSpaceProbs->GetResolution() 
+            << "), CorrelationGrid(" << pCorrelationGrid->GetHeight() << ", " << pCorrelationGrid->GetWidth() << ", " << pCorrelationGrid->GetResolution() << ")" << std::endl;
+
   return pScanMatcher;
 }
 
@@ -541,7 +544,7 @@ kt_double ScanMatcher::traverseMatchScan(
   // set scan pose to be center of grid
 
   // 1. get scan position
-  Pose2 scanPose = pScan->GetSensorPose();
+  Pose2 scanPose = pScan->GetSensorPose();  // (-0.0639983 3.87488e-07 8.41913e-07)
 
   // scan has no readings; cannot do scan matching
   // best guess of pose is based off of adjusted odometer reading
@@ -549,7 +552,7 @@ kt_double ScanMatcher::traverseMatchScan(
   {
     rMean = scanPose;
 
-    // maximum covariance
+    // return a maximum covariance, i.e. the pose is not reliable.
     rCovariance(0, 0) = MAX_VARIANCE; // XX = 500
     rCovariance(1, 1) = MAX_VARIANCE; // YY
     rCovariance(2, 2) = 4 * math::Square(m_pMapper->m_pCoarseAngleResolution->GetValue()); // TH*TH
@@ -557,42 +560,54 @@ kt_double ScanMatcher::traverseMatchScan(
     return 0.0;
   }
 
-  // 2. get size of grid: roi: (x, y) = (21, 21), (width, height) = (4051, 4051); resolution = 0.01
+  // 2. get size of grid: roi: (width, height) = (4201, 4201) cells; resolution = 0.01 (of the smapper not the occupancy grid map)
   Rectangle2<kt_int32s> roi = m_pCorrelationGrid->GetROI();
 
   // 3. compute offset (in meters - lower left corner)
-  Vector2<kt_double> offset;
-  offset.SetX(scanPose.GetX() - (0.5 * (roi.GetWidth() - 1) * m_pCorrelationGrid->GetResolution()));  
-  offset.SetY(scanPose.GetY() - (0.5 * (roi.GetHeight() - 1) * m_pCorrelationGrid->GetResolution())); // -0.5 - (0.5 * (4051 - 1) * 0.01) ) = -80.25
+  Vector2<kt_double> offset;  
+  offset.SetX(scanPose.GetX() - (0.5 * (roi.GetWidth() - 1) * m_pCorrelationGrid->GetResolution()));  // -0.0639983 - (0.5 * (4201 - 1) * 0.01) ) = -21.064
+  offset.SetY(scanPose.GetY() - (0.5 * (roi.GetHeight() - 1) * m_pCorrelationGrid->GetResolution())); // 3.87488e-07 - (0.5 * (4201 - 1) * 0.01) ) = -21
 
   // 4. set offset
-  m_pCorrelationGrid->GetCoordinateConverter()->SetOffset(offset); // GetOffset(): (-22.074, -21.04)
+  m_pCorrelationGrid->GetCoordinateConverter()->SetOffset(offset); // GetOffset(): (-21.064, -21.00)
 
   ///////////////////////////////////////
 
   // set up correlation grid
   AddScans(rBaseScans, scanPose.GetPosition());
 
-  // compute how far to search in each direction, SearchDimensions: 101 101; traverseSearchOffset: 0.5 0.5; traverseSearchResolution: 0.10 0.10
-  Vector2<kt_double> searchDimensions(m_pSearchSpaceProbs->GetWidth(), m_pSearchSpaceProbs->GetHeight()); // 101, 101
+  // compute how far to search in each direction, SearchDimensions: 201 201; traverseSearchOffset: 1.0 1.0; traverseSearchResolution: 0.1 0.1
+  Vector2<kt_double> searchDimensions(m_pSearchSpaceProbs->GetWidth(), m_pSearchSpaceProbs->GetHeight()); // 201, 201 (cells)
   Vector2<kt_double> traverseSearchOffset(0.5 * (searchDimensions.GetX() - 1) * m_pCorrelationGrid->GetResolution(),
-                                          0.5 * (searchDimensions.GetY() - 1) * m_pCorrelationGrid->GetResolution()); // 0.5 * (101-1) * 0.01 = 0.5
+                                          0.5 * (searchDimensions.GetY() - 1) * m_pCorrelationGrid->GetResolution()); // 0.5 * (201-1) * 0.01 = 1.0 (m)
 
-  // a traversal search only checks half the cells in each dimension, m_pCorrelationGrid->GetResolution() = 0.01
+  // a traversal search checks 2 times of m_pCorrelationGrid->GetResolution() = 0.01 
   Vector2<kt_double> traverseSearchResolution(5 * m_pCorrelationGrid->GetResolution() * 2,
-                                              5 * m_pCorrelationGrid->GetResolution() * 2); // 5 * 0.01 * 2 = 0.10
+                                              5 * m_pCorrelationGrid->GetResolution() * 2); // 5 * 0.01 * 2 = 0.10 (m)
 
   // Offset: 0.349 * 9 = 3.141 rad = 180 degrees;   Resolution: 0.0349 * 2.5 = 0.08726 rad = 5 degrees;
   kt_double traverseSearchAngleOffset = m_pMapper->m_pCoarseSearchAngleOffset->GetValue() * 9;
   kt_double traverseSearchAngleResolution = m_pMapper->m_pCoarseAngleResolution->GetValue() * 2.5;
 
-  // actual scan-matching
+  // actual scan-matching w/o doing fine matching
   kt_double bestResponse = CorrelateScan(pScan, scanPose,
                                          traverseSearchOffset, traverseSearchResolution,
                                          traverseSearchAngleOffset, traverseSearchAngleResolution, 
                                          doPenalize, rMean, rCovariance, false);
 
   assert(math::InRange(rMean.GetHeading(), -KT_PI, KT_PI));
+
+  static bool first_time = true;
+  if (first_time){
+    std::cout << "roi(" << roi.GetHeight() << ", " << roi.GetWidth()
+              << "), scanPose(" << scanPose.GetX() << ", " << scanPose.GetY()
+              << "), offset(" << offset.GetX() << ", " << offset.GetY()
+              << "), searchDimensions(" << searchDimensions.GetX() << ", " << searchDimensions.GetY()
+              << "), traverseSearchOffset(" << traverseSearchOffset.GetX() << ", " << traverseSearchOffset.GetY()
+              << "), traverseSearchResolution(" << traverseSearchResolution.GetX() << ", " << traverseSearchResolution.GetY()
+              << "), resolution(" << m_pCorrelationGrid->GetResolution() << ")" << std::endl;
+    first_time = false;
+  }
 
   return bestResponse;
 }
@@ -650,7 +665,7 @@ kt_double ScanMatcher::MatchScan(
   // set up correlation grid
   AddScans(rBaseScans, scanPose.GetPosition());
 
-  // compute how far to search in each direction, SearchDimensions: 51 51; coarseSearchOffset: 0.25 0.25;
+  // compute how far to search in each direction, SearchDimensions: 51 51 (cells); coarseSearchOffset: 0.25 0.25 (m);
   Vector2<kt_double> searchDimensions(0.5 * m_pSearchSpaceProbs->GetWidth(), 0.5 * m_pSearchSpaceProbs->GetHeight());
   Vector2<kt_double> coarseSearchOffset(0.5 * (math::Round(searchDimensions.GetX()) - 1) * m_pCorrelationGrid->GetResolution(),
                                         0.5 * (math::Round(searchDimensions.GetY()) - 1) * m_pCorrelationGrid->GetResolution());
@@ -774,7 +789,7 @@ void ScanMatcher::operator()(const kt_double & y) const
  * Finds the best pose for the scan centering the search in the correlation grid
  * at the given pose and search in the space by the vector and angular offsets
  * in increments of the given resolutions
- * @param rScan scan to match against correlation grid
+ * @param pScan scan to match against correlation grid
  * @param rSearchCenter the center of the search space
  * @param rSearchSpaceOffset searches poses in the area offset by this vector around search center
  * @param rSearchSpaceResolution how fine a granularity to search in the search space
@@ -2721,12 +2736,16 @@ void Mapper::Initialize(kt_double rangeThreshold)
     m_pGraph = new MapperGraph(this, rangeThreshold);
   }
 
+  std::cout << "\n[Mapper.cpp] Mapper Initialized: " << m_pCorrelationSearchSpaceDimension->GetValue() << "; " 
+            << m_pCorrelationSearchSpaceResolution->GetValue() << "; " 
+            << m_pCorrelationSearchSpaceSmearDeviation->GetValue() << "; " << rangeThreshold << std::endl;
+
   m_Initialized = true;
 }
 
 void Mapper::SaveToFile(const std::string & filename)
 {
-  printf("Save To File %s \n", filename.c_str());
+  printf("[Mapper.cpp] Save To File %s \n", filename.c_str());
   std::ofstream ofs(filename.c_str());
   boost::archive::binary_oarchive oa(ofs, boost::archive::no_codecvt);
   oa << BOOST_SERIALIZATION_NVP(*this);
@@ -2734,7 +2753,7 @@ void Mapper::SaveToFile(const std::string & filename)
 
 void Mapper::LoadFromFile(const std::string & filename)
 {
-  printf("Load From File %s \n", filename.c_str());
+  printf("[Mapper.cpp] Load From File %s \n", filename.c_str());
   std::ifstream ifs(filename.c_str());
   boost::archive::binary_iarchive ia(ifs, boost::archive::no_codecvt);
   ia >> BOOST_SERIALIZATION_NVP(*this);
@@ -2846,8 +2865,7 @@ kt_bool Mapper::searchBestVertexInMap(LocalizedRangeScan *pScan, kt_bool addScan
     karto::LaserRangeFinder *pLaserRangeFinder = pScan->GetLaserRangeFinder();
 
     // validate scan
-    if (pLaserRangeFinder == NULL || pScan == NULL ||
-        pLaserRangeFinder->Validate(pScan) == false)    {
+    if (pLaserRangeFinder == NULL || pScan == NULL ||      pLaserRangeFinder->Validate(pScan) == false) {
       return false;
     }
 
@@ -2869,29 +2887,32 @@ kt_bool Mapper::searchBestVertexInMap(LocalizedRangeScan *pScan, kt_bool addScan
     for (Vertex<LocalizedRangeScan> *vertex : vertices_to_search)  {
       LocalizedRangeScan *pLastScan = NULL;
       if (vertex) {
+        // Take the current vertex pose as the sensor pose
         pScan->SetSensorPose( vertex->GetObject()->GetSensorPose() );
+        // Extract the LocalizedRangeScan from the current vertex as the last (or base) scan in the m_pMapperSensorManager
         pLastScan = m_pMapperSensorManager->GetScan(pScan->GetSensorName(), vertex->GetObject()->GetStateId());
         m_pMapperSensorManager->ClearRunningScans(pScan->GetSensorName());
         m_pMapperSensorManager->AddRunningScan(pLastScan);
         m_pMapperSensorManager->SetLastScan(pLastScan);
       }
 
-      // correct scan (if not the first scan)
+      // Estimate the best pose based on the pose of pScan (= the current vertex) using the scan matching method, if not the first scan
       if (m_pUseScanMatching->GetValue() && pLastScan != NULL)  {
         cov.SetToIdentity();
-        Pose2 local_best_pose; // The best pose indicates the sensor pose
+        Pose2 local_best_pose; // The best local "sensor" pose
         kt_double strength = m_pSequentialScanMatcher->traverseMatchScan(
-            pScan, m_pMapperSensorManager->GetRunningScans(pScan->GetSensorName()),
-            local_best_pose, cov, true);
+            pScan, m_pMapperSensorManager->GetRunningScans(pScan->GetSensorName()), // TODO: the RunningScans equals to "pLastScan"? What's the purpose of this term?
+            local_best_pose, cov, true);  // doPenalize = true
 
         // Pick the pose with the highest strength
         if (strength > best_strength) {
-          best_counter = counter;
+          best_counter = vertex->GetObject()->GetStateId();
           best_strength = strength;
           global_best_pose = local_best_pose;
         }
 #ifdef MAPPER_DEBUG
-        std::cout << counter << ". vertex(" << vertex->GetObject()->GetStateId() << "): (" << vertex->GetObject()->GetSensorPose() << ") -> " << strength << ": " << local_best_pose << std::endl;
+        std::cout << counter << ". Initial vertex(" << vertex->GetObject()->GetStateId() << "): (" << vertex->GetObject()->GetSensorPose() << ") -> " 
+                  << strength << ": " << local_best_pose << std::endl;
 #endif
       }
       counter++;
@@ -2908,8 +2929,9 @@ kt_bool Mapper::searchBestVertexInMap(LocalizedRangeScan *pScan, kt_bool addScan
     // Calculate the duration in milliseconds
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
-    std::cout << "\nCounter: " << best_counter << "; best strength = " << best_strength << "; SensorPose(" << global_best_pose << ")" << std::endl;
-    std::cout << "\nThe code snippet took " << duration << " milliseconds to execute.\n" << std::endl;
+    std::cout << "\n1st-level traverse search took " << duration << " milliseconds to execute." << std::endl;
+    std::cout << "Vertex(" << best_counter << "): " << vertices_to_search[best_counter]->GetScore() << ": " << vertices_to_search[best_counter]->GetObject()->GetSensorPose()
+              << " -> best strength = " << best_strength << "; SensorPose(" << global_best_pose << ")\n" << std::endl;
     // ********************************
 
 

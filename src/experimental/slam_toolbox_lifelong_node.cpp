@@ -44,6 +44,7 @@ int main(int argc, char ** argv)
   rclcpp::NodeOptions options;
   auto lifelong_node = std::make_shared<slam_toolbox::LifelongSlamToolbox>(options);
   lifelong_node->configure();
+  // Call the deserializePoseGraphCallback() to deserialize the pose graph and data to update mapper and dataset
   lifelong_node->loadPoseGraphByParams();
   rclcpp::spin(lifelong_node->get_node_base_interface());
   rclcpp::shutdown();

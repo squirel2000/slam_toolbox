@@ -2041,6 +2041,14 @@ public:
   void ClearLocalizationBuffer();
 
   // TY added
+  /**
+   * @brief Search the best vertex around each node/vertex in map based on the given scan
+   * 
+   * @param pScan 
+   * @param addScanToLocalizationBuffer 
+   * @param covariance 
+   * @return kt_bool 
+   */
   kt_bool searchBestVertexInMap(LocalizedRangeScan *pScan, kt_bool addScanToLocalizationBuffer = false, Matrix3 *covariance = nullptr);
 
   /**

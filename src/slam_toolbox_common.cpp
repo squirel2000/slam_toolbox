@@ -69,6 +69,7 @@ void SlamToolbox::configure()
     state_, processor_type_);
   reprocessing_transform_.setIdentity();
 
+  // Create a thread for publishing transforms and visualizations at 1/transform_publish_period
   double transform_publish_period = 0.05;
   transform_publish_period =
     this->declare_parameter("transform_publish_period",
@@ -269,7 +270,7 @@ void SlamToolbox::setROSInterfaces()
 
 /*****************************************************************************/
 void SlamToolbox::publishTransformLoop(
-  const double & transform_publish_period)
+  const double & transform_publish_period)  // transform_publish_period = 0.05;
 /*****************************************************************************/
 {
   if (transform_publish_period == 0) {
@@ -329,7 +330,7 @@ void SlamToolbox::publishVisualizations()
 void SlamToolbox::loadPoseGraphByParams()
 /*****************************************************************************/
 {
-  std::string filename; // map_file_name
+  std::string filename; // Declared in YAML, e.g. map_file_name: /home/asus/colcon_ws/src/asus_amr/asus_vms/data/data04 
   geometry_msgs::msg::Pose2D pose;
   bool dock = false;
   if (shouldStartWithPoseGraph(filename, pose, dock)) {
@@ -337,6 +338,7 @@ void SlamToolbox::loadPoseGraphByParams()
       std::make_shared<slam_toolbox::srv::DeserializePoseGraph::Request>();
     std::shared_ptr<slam_toolbox::srv::DeserializePoseGraph::Response> resp =
       std::make_shared<slam_toolbox::srv::DeserializePoseGraph::Response>();
+      
     req->initial_pose = pose;
     req->filename = filename;
     if (dock) {
@@ -355,19 +357,19 @@ void SlamToolbox::loadPoseGraphByParams()
 /*****************************************************************************/
 bool SlamToolbox::shouldStartWithPoseGraph(
   std::string & filename,
-  geometry_msgs::msg::Pose2D & pose, bool & start_at_dock)
+  geometry_msgs::msg::Pose2D& pose, bool& start_at_dock)  // start_at_dock = false (Default)
 /*****************************************************************************/
 {
   // if given a map to load at run time, do it.
   
   // map_file_name: /home/asus/colcon_ws/src/asus_amr/asus_vms/data/data03
-  // map_start_pose: [-1.5, -0.5, 0.0]
-
   this->declare_parameter("map_file_name", std::string(""));
-  auto map_start_pose = this->declare_parameter("map_start_pose",rclcpp::ParameterType::PARAMETER_DOUBLE_ARRAY);
-  auto map_start_at_dock = this->declare_parameter("map_start_at_dock",rclcpp::ParameterType::PARAMETER_BOOL);
   filename = this->get_parameter("map_file_name").as_string();
 
+  // map_start_pose: [-1.5, -0.5, 0.0]  # slam_toolbox::srv::DeserializePoseGraph::Request::START_AT_GIVEN_POSE
+  auto map_start_pose = this->declare_parameter("map_start_pose", rclcpp::ParameterType::PARAMETER_DOUBLE_ARRAY);
+  auto map_start_at_dock = this->declare_parameter("map_start_at_dock", rclcpp::ParameterType::PARAMETER_BOOL);
+  
   RCLCPP_WARN(get_logger(), "shouldStartWithPoseGraph(): %s, ", filename.c_str() );
 
   if (!filename.empty()) {
@@ -405,9 +407,9 @@ bool SlamToolbox::shouldStartWithPoseGraph(
 }
 
 /*****************************************************************************/
-LaserRangeFinder * SlamToolbox::getLaser(
-  const
-  sensor_msgs::msg::LaserScan::ConstSharedPtr & scan)
+// TODO: Is this called by laserCallback() in slam_toolbox_lifelong.cpp?
+LaserRangeFinder* SlamToolbox::getLaser(
+  const  sensor_msgs::msg::LaserScan::ConstSharedPtr& scan)
 /*****************************************************************************/
 {
   const std::string & frame = scan->header.frame_id;
@@ -638,6 +640,7 @@ LocalizedRangeScan * SlamToolbox::addScan(
     range_scan->SetCorrectedPose(range_scan->GetOdometricPose());
     process_near_pose_.reset(nullptr);
 
+    // Search the best pose around each node/vertex (2 * 2 * pi) in the smapper_
     processed = smapper_->getMapper()->searchBestVertexInMap(range_scan, false, &covariance);
     // processed = smapper_->getMapper()->ProcessAgainstNodesNearBy(range_scan, false, &covariance);
 
@@ -648,8 +651,7 @@ LocalizedRangeScan * SlamToolbox::addScan(
                 range_scan->GetCorrectedPose().GetX(), range_scan->GetCorrectedPose().GetY(), range_scan->GetCorrectedPose().GetHeading());
 
   } else {  // TODO: The type of PROCESS_LOCALIZATION is not implemented yet? -> declared in slam_toolbox_localization.cpp
-    RCLCPP_FATAL(get_logger(),
-      "SlamToolbox: No valid processor type set! Exiting.");
+    RCLCPP_FATAL(get_logger(), "SlamToolbox: No valid processor type set! Exiting.");
     exit(-1);
   }
 
@@ -666,6 +668,8 @@ LocalizedRangeScan * SlamToolbox::addScan(
 
     publishPose(range_scan->GetCorrectedPose(), covariance, scan->header.stamp);
   } else {
+    // RCLCPP_WARN(get_logger(), "[addScan] Could not process scan at:");
+    // std::cout << range_scan->GetSensorPose() << std::endl;
     delete range_scan;
     range_scan = nullptr;
   }
@@ -815,10 +819,9 @@ void SlamToolbox::loadSerializedPoseGraph(
     exit(-1);
   }
 
-  // create a current laser sensor
-  LaserRangeFinder * laser =
-    dynamic_cast<LaserRangeFinder *>(
-    dataset_->GetLasers()[0]);
+  // This type of two dynamic-cast check is done to ensure type safety.
+  // create a current laser sensor with the first laser sensor
+  LaserRangeFinder* laser = dynamic_cast<LaserRangeFinder*>(dataset_->GetLasers()[0]);
   // Cast the LaserRangeFinder pointer to a more generic Sensor pointer
   Sensor * pSensor = dynamic_cast<Sensor *>(laser);
   if (pSensor) {

@@ -32,6 +32,7 @@
 #include "tbb/blocked_range.h"
 
 #include "Eigen/Core"
+#include "Eigen/SparseCore"
 #include "rclcpp/rclcpp.hpp"
 #include "Karto.h"  // NOLINT
 #include "nanoflann_adaptors.h"  // NOLINT
@@ -143,18 +144,30 @@ public:
 class LinkInfo : public EdgeLabel
 {
 public:
+  LinkInfo()
+  {
+  }
+
   /**
    * Constructs a link between the given poses
    * @param rPose1
    * @param rPose2
    * @param rCovariance
    */
-  LinkInfo()
-  {
-  }
   LinkInfo(const Pose2 & rPose1, const Pose2 & rPose2, const Matrix3 & rCovariance)
   {
     Update(rPose1, rPose2, rCovariance);
+  }
+
+  LinkInfo(
+      const Pose2 & rPose1,
+      const Pose2 & rPose2,
+      const Pose2 & rPoseDifference,
+      const Matrix3 & rCovariance)
+    : m_Pose1(rPose1), m_Pose2(rPose2),
+      m_PoseDifference(rPoseDifference),
+      m_Covariance(rCovariance)
+  {
   }
 
   /**
@@ -294,6 +307,18 @@ public:
   {
     m_Edges[idx] = NULL;
     m_Edges.erase(m_Edges.begin() + idx);
+  }
+
+  /**
+   * Removes an edge
+   */
+  inline void RemoveEdge(Edge<T> * pEdge)
+  {
+    auto it = std::find(m_Edges.begin(), m_Edges.end(), pEdge);
+    if (it == m_Edges.end()) {
+      std::cout << "Edge not found!" << std::endl;
+    }
+    RemoveEdge(std::distance(m_Edges.begin(), it));
   }
 
   /**
@@ -629,6 +654,18 @@ public:
     m_Edges.erase(m_Edges.begin() + idx);
   }
 
+  /**
+   * Removes an edge of the graph
+   * @param pEdge
+   */
+  inline void RemoveEdge(Edge<T>* pEdge)
+  {
+    auto it = std::find(m_Edges.begin(), m_Edges.end(), pEdge);
+    if (it == m_Edges.end()) {
+      std::cout << "Edge not found!" << std::endl;
+    }
+    RemoveEdge(std::distance(m_Edges.begin(), it));
+  }
 
   /**
    * Deletes the graph data
@@ -742,6 +779,8 @@ public:
     LocalizedRangeScan * pSourceScan,
     LocalizedRangeScan * pTargetScan,
     kt_bool & rIsNewEdge);
+
+  kt_bool AddEdge(Edge<LocalizedRangeScan> * edge);
 
   /**
    * Link scan to last scan and nearby chains of scans
@@ -1053,13 +1092,19 @@ public:
   /**
    * Get graph stored
    */
-  virtual std::unordered_map<int, Eigen::Vector3d> * getGraph()
+  virtual const std::unordered_map<int, Eigen::Vector3d> * getGraph()
   {
     std::cout <<
       "getGraph method not implemented for this solver type. Graph visualization unavailable." <<
       std::endl;
     return nullptr;
   }
+
+  /**
+   * Get information matrix associated with the graph
+   */
+  virtual Eigen::SparseMatrix<double> GetInformationMatrix(
+      std::unordered_map<int, Eigen::Index> * /* ordering */) const = 0;
 
   /**
    * Modify a node's pose
@@ -2037,6 +2082,7 @@ public:
   kt_bool ProcessAgainstNodesNearBy(LocalizedRangeScan * pScan, kt_bool addScanToLocalizationBuffer = false, Matrix3 * covariance = nullptr);
   kt_bool ProcessLocalization(LocalizedRangeScan * pScan, Matrix3 * covariance = nullptr);
   kt_bool RemoveNodeFromGraph(Vertex<LocalizedRangeScan> *);
+  kt_bool MarginalizeNodeFromGraph(Vertex<LocalizedRangeScan> *);
   void AddScanToLocalizationBuffer(LocalizedRangeScan * pScan, Vertex<LocalizedRangeScan> * scan_vertex);
   void ClearLocalizationBuffer();
 
@@ -2141,6 +2187,8 @@ protected:
    * the scan is the first scan to be added
    */
   kt_bool HasMovedEnough(LocalizedRangeScan * pScan, LocalizedRangeScan * pLastScan) const;
+
+  kt_bool RemoveEdgeFromGraph(Edge<LocalizedRangeScan> *);
 
 public:
   /////////////////////////////////////////////

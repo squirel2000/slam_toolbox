@@ -9,7 +9,10 @@
 #include <ceres/ceres.h>
 #include <ceres/local_parameterization.h>
 #include <cmath>
+#include <iterator>
 #include <utility>
+
+#include <Eigen/SparseCore>
 
 /*****************************************************************************/
 /*****************************************************************************/
@@ -18,6 +21,86 @@ inline std::size_t GetHash(const int & x, const int & y)
 {
   return (std::hash<double>()(x) ^ (std::hash<double>()(y) << 1)) >> 1;
 }
+
+/*****************************************************************************/
+/*****************************************************************************/
+/*****************************************************************************/
+
+class CRSMatrixIterator : public std::iterator<
+  std::input_iterator_tag, Eigen::Triplet<double>>
+{
+public:
+  static CRSMatrixIterator begin(const ceres::CRSMatrix & matrix)
+  {
+    return CRSMatrixIterator(matrix);
+  }
+
+  static CRSMatrixIterator end(const ceres::CRSMatrix & matrix)
+  {
+    return CRSMatrixIterator(matrix, matrix.num_rows + 1);
+  }
+
+  CRSMatrixIterator& operator++()
+  {
+    if (++data_index_ == matrix_.rows[row_index_ + 1])
+    {
+      ++row_index_;
+    }
+    current_triplet_ = MakeTriplet();
+    return *this;
+  }
+
+  CRSMatrixIterator operator++(int)
+  {
+    CRSMatrixIterator it = *this;
+    ++(*this);
+    return it;
+  }
+
+  bool operator==(const CRSMatrixIterator & other) const
+  {
+    return &matrix_ == &other.matrix_ &&
+        row_index_ == other.row_index_ &&
+        data_index_ == other.data_index_;
+  }
+
+  bool operator!=(const CRSMatrixIterator & other) const
+  {
+    return !(*this == other);
+  }
+
+  pointer operator->() {
+    return &current_triplet_;
+  }
+
+  reference operator*() {
+    return current_triplet_;
+  }
+
+ private:
+  explicit CRSMatrixIterator(
+      const ceres::CRSMatrix & matrix,
+      size_t row_index = 0)
+  : matrix_(matrix),
+    row_index_(row_index),
+    data_index_(matrix.rows[row_index])
+  {
+    current_triplet_ = MakeTriplet();
+  }
+
+  Eigen::Triplet<double> MakeTriplet() const
+  {
+    return Eigen::Triplet<double>(
+      row_index_, matrix_.cols[data_index_],
+      matrix_.values[data_index_]);
+  }
+
+  const ceres::CRSMatrix & matrix_;
+  size_t row_index_;
+  size_t data_index_;
+
+  Eigen::Triplet<double> current_triplet_;
+};
 
 /*****************************************************************************/
 /*****************************************************************************/

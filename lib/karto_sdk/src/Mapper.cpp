@@ -20,6 +20,7 @@
 #include <math.h>
 #include <assert.h>
 #include <boost/serialization/vector.hpp>
+#include <Eigen/Core>
 #include <sstream>
 #include <fstream>
 #include <stdexcept>
@@ -28,12 +29,15 @@
 #include <list>
 #include <iterator>
 #include <map>
+#include <unordered_map>
 #include <vector>
 #include <utility>
 #include <algorithm>
 #include <string>
 
 #include "karto_sdk/Mapper.h"
+#include "karto_sdk/contrib/ChowLiuTreeApprox.h"
+#include "karto_sdk/contrib/EigenExtensions.h"
 
 BOOST_CLASS_EXPORT(karto::MapperGraph);
 BOOST_CLASS_EXPORT(karto::Graph<karto::LocalizedRangeScan>);

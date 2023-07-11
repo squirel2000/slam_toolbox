@@ -1480,15 +1480,6 @@ public:
   }
 
   /**
-   * 
-   * 
-   * \tparam RESULTSET Should be any ResultSet<DistanceType>
-   * mindistsq
-   * \return true if the search should be continued, false if the results are
-   * sufficient
-   */
-
-  /**
    * @brief Performs an exact search in the tree starting from a node.
    *        Represents a KD-tree search algorithm that efficiently searches for the nearest points in a multi-dimensional space to a given query point.
    * 

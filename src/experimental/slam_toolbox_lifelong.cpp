@@ -321,6 +321,7 @@ void LifelongSlamToolbox::removeFromSlamGraph(
   Vertex<LocalizedRangeScan> * vertex)
 /*****************************************************************************/
 {
+RCLCPP_WARN(get_logger(), "removeFromSlamGraph()");
   smapper_->getMapper()->MarginalizeNodeFromGraph(vertex);
   smapper_->getMapper()->GetMapperSensorManager()->RemoveScan(
     vertex->GetObject());

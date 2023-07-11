@@ -665,7 +665,7 @@ ArrangeView(XprType & xpr, const RowIndices & rowIndices, const ColIndices & col
   return Eigen::View<XprType, RowIndices, ColIndices>(xpr, rowIndices, colIndices);
 }
 
-/** Computes the inverse of a sparse matrix. */
+/** Computes the inverse of a sparse matrix using the SpareseLU slover from Eigen */
 template <typename Scalar, int Options, typename StorageIndex,
           typename SolverType = Eigen::SparseLU<
             Eigen::SparseMatrix<Scalar, Options, StorageIndex>>>
@@ -678,6 +678,9 @@ ComputeSparseInverse(const Eigen::SparseMatrix<Scalar, Options, StorageIndex>& m
   assert(dimension == matrix.innerSize());  // must be square
   SolverType solver;
   solver.compute(matrix);
+  if (solver.info() != Eigen::Success) {  // Check if the decomposition is successful
+    return matrix;  // return the original matrix
+  }
   MatrixType I(dimension, dimension);
   I.setIdentity();
   return solver.solve(I);

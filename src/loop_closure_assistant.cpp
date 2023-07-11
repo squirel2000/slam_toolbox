@@ -156,13 +156,14 @@ void LoopClosureAssistant::publishGraph()
     return;
   }
 
-  RCLCPP_DEBUG(node_->get_logger(), "Graph size: %zu", graph->size());
+  RCLCPP_INFO(node_->get_logger(), "Graph size: %zu w/ interactive_mode_ %d", graph->size(), interactive_mode_);
   bool interactive_mode = false;
   {
     boost::mutex::scoped_lock lock(interactive_mutex_);
     interactive_mode = interactive_mode_;
   }
 
+  // Get vertices and edges and encapsulate them as RViz's MarkerArray 
   const auto & vertices = mapper_->GetGraph()->GetVertices();
   const auto & edges = mapper_->GetGraph()->GetEdges();
   const auto & localization_vertices = mapper_->GetLocalizationVertices();
@@ -170,11 +171,10 @@ void LoopClosureAssistant::publishGraph()
   int first_localization_id = std::numeric_limits<int>::max();
   if (!localization_vertices.empty()) {
     first_localization_id = localization_vertices.front().vertex->GetObject()->GetUniqueId();
+    // RCLCPP_WARN(node_->get_logger(), "first_localization_id: %d", first_localization_id);
   }
 
   visualization_msgs::msg::MarkerArray marray;
-  visualization_msgs::msg::Marker m = vis_utils::toMarker(map_frame_,
-      "slam_toolbox", 0.1, node_);
 
   // clear existing markers to account for any removed nodes
   visualization_msgs::msg::Marker clear;
@@ -192,6 +192,9 @@ void LoopClosureAssistant::publishGraph()
       m.id = vertex.first;
       m.pose.position.x = pose.GetX();
       m.pose.position.y = pose.GetY();
+
+      // TODO: Check when the AddScan() is triggered, since there are many vertices added even at static state.
+      // RCLCPP_WARN(node_->get_logger(), "m id: %d|%d, g: %.1f (%.3f, %.3f)", first_localization_id, m.id, m.color.g, m.pose.position.x, m.pose.position.y);
 
       if (interactive_mode && enable_interactive_mode_) {
         visualization_msgs::msg::InteractiveMarker int_marker =

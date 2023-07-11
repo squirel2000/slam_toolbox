@@ -37,7 +37,8 @@ public:
 
   static CRSMatrixIterator end(const ceres::CRSMatrix & matrix)
   {
-    return CRSMatrixIterator(matrix, matrix.num_rows + 1);
+    // Fix the "malloc() is invalid" issue 
+    return CRSMatrixIterator(matrix, matrix.num_rows, matrix.rows[matrix.num_rows]);
   }
 
   CRSMatrixIterator& operator++()
@@ -78,15 +79,17 @@ public:
   }
 
  private:
-  explicit CRSMatrixIterator(
-      const ceres::CRSMatrix & matrix,
-      size_t row_index = 0)
-  : matrix_(matrix),
-    row_index_(row_index),
-    data_index_(matrix.rows[row_index])
-  {
-    current_triplet_ = MakeTriplet();
-  }
+   // Fix the "malloc() is invalid" issue 
+   explicit CRSMatrixIterator(
+     const ceres::CRSMatrix& matrix,
+     size_t row_index = 0,
+     size_t data_index = 0)
+     : matrix_(matrix),
+     row_index_(row_index),
+     data_index_(data_index)
+   {
+     current_triplet_ = MakeTriplet();
+   }
 
   Eigen::Triplet<double> MakeTriplet() const
   {

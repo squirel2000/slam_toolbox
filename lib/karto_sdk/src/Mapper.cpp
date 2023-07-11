@@ -663,7 +663,6 @@ kt_double ScanMatcher::MatchScan(
   // 4. set offset (-22.074, -21.04)
   m_pCorrelationGrid->GetCoordinateConverter()->SetOffset(offset);
 
-  // std::cout << "\nroi center: " << roi.GetCenter() << "; position: " << roi.GetPosition() << "; Size: " << roi.GetSize() << std::endl;
   ///////////////////////////////////////
 
   // set up correlation grid
@@ -1601,10 +1600,6 @@ void MapperGraph::AddEdges(LocalizedRangeScan * pScan, const Matrix3 & rCovarian
 
 kt_bool MapperGraph::TryCloseLoop(LocalizedRangeScan * pScan, const Name & rSensorName)
 {
-
-  // std::cout << std::endl;
-  // std::cout << "TryCloseLoop(): " << rSensorName << std::endl;
-
   kt_bool loopClosed = false;
 
   kt_int32u scanIndex = 0;
@@ -1765,7 +1760,6 @@ void MapperGraph::LinkNearChains(
       rCovariances.push_back(covariance);
       LinkChainToScan(*iter, pScan, mean, covariance);
     }
-    // std::cout << "LinkNearChains() after LinkChainToScan: pScan(): " << pScan->GetSensorPose() << std::endl;
   }
 }
 
@@ -1982,8 +1976,8 @@ std::vector<Vertex<LocalizedRangeScan> *> MapperGraph::getMapVertices(Name name)
 
   std::vector<Vertex<LocalizedRangeScan> *> vertices_to_search;
   std::map<int, Vertex<LocalizedRangeScan> *>::iterator it;
-  for (it = vertices.begin(); it != vertices.end(); ++it)  {
-    if (it->second)    {
+  for (it = vertices.begin(); it != vertices.end(); ++it) {
+    if (it->second) {
       vertices_to_search.push_back(it->second);
     }
   }
@@ -3091,6 +3085,7 @@ kt_bool Mapper::ProcessAgainstNodesNearBy(LocalizedRangeScan * pScan, kt_bool ad
     if (addScanToLocalizationBuffer) {
       AddScanToLocalizationBuffer(pScan, scan_vertex);
     }
+
     return true;
   }
 
@@ -3230,6 +3225,104 @@ void Mapper::ClearLocalizationBuffer()
   }
 
   return;
+}
+
+kt_bool Mapper::MarginalizeNodeFromGraph(
+    Vertex<LocalizedRangeScan> * vertex_to_marginalize)
+{
+  // Marginalization is carried out as proposed in section 5 of:
+  //
+  //   Kretzschmar, Henrik, and Cyrill Stachniss. “Information-Theoretic
+  //   Compression of Pose Graphs for Laser-Based SLAM.” The International
+  //   Journal of Robotics Research, vol. 31, no. 11, Sept. 2012,
+  //   pp. 1219–1230, doi:10.1177/0278364912455072.
+
+  // (1) Fetch information matrix from solver.
+  std::unordered_map<int, Eigen::Index> ordering;
+  const Eigen::SparseMatrix<double> information_matrix =
+      m_pScanOptimizer->GetInformationMatrix(&ordering);
+
+  // (2) Marginalize variable from information matrix.
+  constexpr Eigen::Index block_size = 3;
+  auto block_index_of = [&](Vertex<LocalizedRangeScan> * vertex) {
+    return ordering[vertex->GetObject()->GetUniqueId()];
+  };
+  const Eigen::Index marginalized_block_index =
+      block_index_of(vertex_to_marginalize);
+  const Eigen::SparseMatrix<double> marginal_information_matrix =
+      contrib::ComputeMarginalInformationMatrix(
+          information_matrix, marginalized_block_index, block_size);
+  std::cout << "(2) -> marginalized_block_index " << marginalized_block_index << "; " << std::endl;  // 0
+  
+  // (3) Compute marginal covariance *local* to the elimination clique
+  // i.e. by only inverting the relevant marginal information submatrix.
+  // This is an approximation for the sake of performance.
+  std::vector<Vertex<LocalizedRangeScan> *> elimination_clique =
+      vertex_to_marginalize->GetAdjacentVertices();
+  std::vector<Eigen::Index> elimination_clique_indices;  // need all indices
+  elimination_clique_indices.reserve(elimination_clique.size() * block_size);
+  for (Vertex<LocalizedRangeScan> * vertex : elimination_clique) {
+    Eigen::Index block_index = block_index_of(vertex);
+    if (block_index > marginalized_block_index) {
+      block_index -= block_size;
+    }
+    for (Eigen::Index offset = 0; offset < block_size; ++offset) {
+      elimination_clique_indices.push_back(block_index + offset);
+    }
+  }
+  const Eigen::SparseMatrix<double> local_marginal_covariance_matrix =
+      contrib::ComputeSparseInverse(
+          contrib::ArrangeView(marginal_information_matrix,
+                               elimination_clique_indices,
+                               elimination_clique_indices).eval());
+
+  // (4) Remove node for marginalized variable.
+  // Why "remove the node from graph" still base on the input of "vertex_to_marginalize"?
+  RemoveNodeFromGraph(vertex_to_marginalize);
+
+  // (5) Remove all edges in the subgraph induced by the elimination clique.
+  for (Vertex<LocalizedRangeScan> * vertex : elimination_clique) {
+    for (Edge<LocalizedRangeScan> * edge : vertex->GetEdges()) {
+      Vertex<LocalizedRangeScan> * other_vertex =
+          edge->GetSource() == vertex ?
+          edge->GetTarget() : edge->GetSource();
+      const auto it = std::find(
+          elimination_clique.begin(),
+          elimination_clique.end(),
+          other_vertex);
+      if (it != elimination_clique.end()) {
+        RemoveEdgeFromGraph(edge);
+      }
+    }
+  }
+
+  // (6) Compute Chow-Liu tree approximation to the elimination clique.
+  std::vector<Edge<LocalizedRangeScan> *> chow_liu_tree_approximation =
+      contrib::ComputeChowLiuTreeApproximation(
+          elimination_clique, local_marginal_covariance_matrix);
+  std::cout << "6. chow_liu_tree: " << elimination_clique.size() << " * " << local_marginal_covariance_matrix.size() << " = " << chow_liu_tree_approximation.size() << std::endl;
+
+  // (7) Push tree edges to graph and solver (as constraints).
+  for (Edge<LocalizedRangeScan> * edge : chow_liu_tree_approximation) {
+    assert(m_pGraph->AddEdge(edge));
+    m_pScanOptimizer->AddConstraint(edge);
+  }
+
+  return true;
+}
+
+kt_bool Mapper::RemoveEdgeFromGraph(Edge<LocalizedRangeScan> * edge_to_remove)
+{
+  Vertex<LocalizedRangeScan> * source = edge_to_remove->GetSource();
+  Vertex<LocalizedRangeScan> * target = edge_to_remove->GetTarget();
+  source->RemoveEdge(edge_to_remove);
+  target->RemoveEdge(edge_to_remove);
+  m_pScanOptimizer->RemoveConstraint(
+      source->GetObject()->GetUniqueId(),
+      target->GetObject()->GetUniqueId());
+  m_pGraph->RemoveEdge(edge_to_remove);
+  delete edge_to_remove;
+  return true;
 }
 
 kt_bool Mapper::RemoveNodeFromGraph(Vertex<LocalizedRangeScan> * vertex_to_remove)

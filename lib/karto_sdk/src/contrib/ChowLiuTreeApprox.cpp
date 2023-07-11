@@ -19,8 +19,8 @@ Eigen::SparseMatrix<double> ComputeMarginalInformationMatrix(
 {
   const Eigen::Index dimension = information_matrix.outerSize();
   assert(dimension == information_matrix.innerSize());  // must be square
-  const Eigen::Index marginal_dimension = dimension - variables_dimension;
-  const Eigen::Index last_variable_index = dimension - variables_dimension;
+  const Eigen::Index marginal_dimension = dimension - variables_dimension;  // 255 = 258 - 3
+  const Eigen::Index last_variable_index = dimension - variables_dimension; // 255 = 258 -3
   // (1) Break up information matrix based on which are the variables
   // kept (a) and which is the variable discarded (b).
   Eigen::SparseMatrix<double>
@@ -29,17 +29,18 @@ Eigen::SparseMatrix<double> ComputeMarginalInformationMatrix(
   if (discarded_variable_index == 0) {
     information_submatrix_aa =
         information_matrix.bottomRightCorner(
-            marginal_dimension, marginal_dimension);
+            marginal_dimension, marginal_dimension);    // 255, 255
     information_submatrix_ab =
         information_matrix.bottomLeftCorner(
-            marginal_dimension, variables_dimension);
+            marginal_dimension, variables_dimension);   // 255, 3
     information_submatrix_ba =
         information_matrix.topRightCorner(
-            variables_dimension, marginal_dimension);
+            variables_dimension, marginal_dimension);   // 3, 255
     information_submatrix_bb =
         information_matrix.topLeftCorner(
-            variables_dimension, variables_dimension);
+            variables_dimension, variables_dimension);  // 3, 3
   } else if (discarded_variable_index == last_variable_index) {
+std::cout << "2. else-if information_submatrix_aa / ab/ ba /bb created " << std::endl;
     information_submatrix_aa =
         information_matrix.topLeftCorner(
             marginal_dimension, marginal_dimension);
@@ -53,6 +54,7 @@ Eigen::SparseMatrix<double> ComputeMarginalInformationMatrix(
         information_matrix.bottomRightCorner(
             variables_dimension, variables_dimension);
   } else {
+std::cout << "2. else information_submatrix_aa / ab/ ba /bb created " << std::endl;
     const Eigen::Index next_variable_index =
         discarded_variable_index + variables_dimension;
     information_submatrix_aa = StackVertically(
@@ -153,6 +155,9 @@ std::vector<Edge<LocalizedRangeScan> *> ComputeChowLiuTreeApproximation(
     boost::vecS, boost::vecS, boost::undirectedS, boost::no_property,
     boost::property<boost::edge_weight_t, double>>;
   WeightedGraphT clique_subgraph(clique.size());
+  // Calculate the covariance submatrices for each pair of variables in the clique
+  // MI(X, Y) = 0.5 * log2(det(Σ_X) / det(Σ_X - Σ_XY * Σ_Y ^ -1 * Σ_YX))
+  // where Σ_X is the covariance matrix for variable X, Σ_Y is the covariance matrix for variable Y, and Σ_XY is the covariance matrix for the pair of variables (X, Y).
   for (size_t i = 0; i < clique.size() - 1; ++i) {
     for (size_t j = i + 1; j < clique.size(); ++j) {
       const auto covariance_submatrix_ii =

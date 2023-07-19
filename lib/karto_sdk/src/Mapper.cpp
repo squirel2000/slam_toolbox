@@ -38,6 +38,7 @@
 #include "karto_sdk/Mapper.h"
 #include "karto_sdk/contrib/ChowLiuTreeApprox.h"
 #include "karto_sdk/contrib/EigenExtensions.h"
+#include <Eigen/Eigenvalues>
 
 BOOST_CLASS_EXPORT(karto::MapperGraph);
 BOOST_CLASS_EXPORT(karto::Graph<karto::LocalizedRangeScan>);
@@ -52,7 +53,7 @@ namespace karto
 
 // enable this for verbose debug information
 // #define KARTO_DEBUG
-// #define MAPPER_DEBUG
+#define MAPPER_DEBUG
 
   #define MAX_VARIANCE            500.0
   #define DISTANCE_PENALTY_GAIN   0.2
@@ -3237,44 +3238,84 @@ kt_bool Mapper::MarginalizeNodeFromGraph(
   //   Journal of Robotics Research, vol. 31, no. 11, Sept. 2012,
   //   pp. 1219–1230, doi:10.1177/0278364912455072.
 
-  // (1) Fetch information matrix from solver.
+  // (1) Fetch information matrix from solver. The information matrix is the inverse of the covariance matrix
   std::unordered_map<int, Eigen::Index> ordering;
   const Eigen::SparseMatrix<double> information_matrix =
       m_pScanOptimizer->GetInformationMatrix(&ordering);
 
+  // Record the information_matrix in information_matrix.csv
+  std::ofstream file("information_matrix.csv");
+  if (file.is_open()) {
+    file << information_matrix << '\n';
+  }
+
   // (2) Marginalize variable from information matrix.
   constexpr Eigen::Index block_size = 3;
+  // The 'block_index_of' function is used to find the index of a specific node in the information matrix.
   auto block_index_of = [&](Vertex<LocalizedRangeScan> * vertex) {
     return ordering[vertex->GetObject()->GetUniqueId()];
   };
-  const Eigen::Index marginalized_block_index =
-      block_index_of(vertex_to_marginalize);
+
+  auto block_index_of_test = [&](kt_int32s Id){
+    return ordering[Id];
+  };
+  for (kt_int32s index =0; index < 15; index++) {
+    std::cout << block_index_of_test(index) << "; " ;
+  }
+
+  
+  // TODO: Check the "block_index_of" method, which always returns 0, that is the 'topLeftCorner' submatrix
+  const Eigen::Index marginalized_block_index = block_index_of(vertex_to_marginalize);
   const Eigen::SparseMatrix<double> marginal_information_matrix =
       contrib::ComputeMarginalInformationMatrix(
-          information_matrix, marginalized_block_index, block_size);
-  std::cout << "(2) -> marginalized_block_index " << marginalized_block_index << "; " << std::endl;  // 0
-  
-  // (3) Compute marginal covariance *local* to the elimination clique
+          information_matrix, marginalized_block_index, block_size);  // 0(69), 3
+  std::cout << "(2) -> marginalized_block_index " << marginalized_block_index << "; " << vertex_to_marginalize->GetObject()->GetUniqueId() << std::endl;  // 0, 69
+  std::cout << "ordering[69] = marginalized_block_index: " << ordering[vertex_to_marginalize->GetObject()->GetUniqueId()] << " = " << marginalized_block_index << std::endl;
+  std::cout << "marginal_information_matrix.size(): " << marginal_information_matrix.size() << "; " << marginal_information_matrix.rows() << "; " << marginal_information_matrix.cols() << std::endl;
+
+  // (3) Compute marginal covariance *local* to the elimination clique (adjacent vertices)
   // i.e. by only inverting the relevant marginal information submatrix.
   // This is an approximation for the sake of performance.
   std::vector<Vertex<LocalizedRangeScan> *> elimination_clique =
       vertex_to_marginalize->GetAdjacentVertices();
   std::vector<Eigen::Index> elimination_clique_indices;  // need all indices
   elimination_clique_indices.reserve(elimination_clique.size() * block_size);
+  std::cout << "eliminate clique size: " << elimination_clique.size()  << "; block_size: " << block_size << "; elimination clique indices: " << elimination_clique_indices.size() << std::endl; // 2, 3, 0
   for (Vertex<LocalizedRangeScan> * vertex : elimination_clique) {
     Eigen::Index block_index = block_index_of(vertex);
-    if (block_index > marginalized_block_index) {
+    std::cout << "block_index: " << block_index << std::endl;
+    if (block_index > marginalized_block_index) { // > 0
       block_index -= block_size;
     }
+    std::cout << "block_index_of: " << block_index_of(vertex) << "; block_index: " << block_index << std::endl;
     for (Eigen::Index offset = 0; offset < block_size; ++offset) {
       elimination_clique_indices.push_back(block_index + offset);
     }
+    std::cout << "eliminate clique indices size: " << elimination_clique_indices.size() << std::endl;
   }
   const Eigen::SparseMatrix<double> local_marginal_covariance_matrix =
       contrib::ComputeSparseInverse(
           contrib::ArrangeView(marginal_information_matrix,
                                elimination_clique_indices,
                                elimination_clique_indices).eval());
+  std::cout << "local_marginal_covariance_matrix:\n" << local_marginal_covariance_matrix << std::endl;
+  // std::cout << "local_marginal_covariance_matrix.nonZeros(): " << local_marginal_covariance_matrix.nonZeros() << std::endl;
+  // for (int k = 0; k < local_marginal_covariance_matrix.outerSize(); ++k)
+  //   for (Eigen::SparseMatrix<double>::InnerIterator it(local_marginal_covariance_matrix, k); it; ++it) {
+  //     std::cout << "Element at (" << it.row() << "," << it.col() << ") is non-zero and its value is " << it.value() << std::endl;
+  //   }
+  // Eigen::MatrixXd dense_matrix = Eigen::MatrixXd(local_marginal_covariance_matrix);
+  // if (dense_matrix.isApprox(dense_matrix.transpose())) {
+  //   std::cout << "The matrix is symmetric." << std::endl;
+  // } else {
+  //   std::cout << "The matrix is not symmetric." << std::endl;
+  // }
+  // Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigen_solver(dense_matrix);
+  // if (eigen_solver.eigenvalues().minCoeff() > 0) {
+  //   std::cout << "The matrix is positive definite." << std::endl;
+  // } else {
+  //   std::cout << "The matrix is not positive definite." << std::endl;
+  // }
 
   // (4) Remove node for marginalized variable.
   // Why "remove the node from graph" still base on the input of "vertex_to_marginalize"?

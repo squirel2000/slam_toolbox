@@ -36,7 +36,7 @@ SlamToolbox::SlamToolbox()
 /*****************************************************************************/
 SlamToolbox::SlamToolbox(rclcpp::NodeOptions options)
 : Node("slam_toolbox", "", options),
-  solver_loader_("slam_toolbox", "karto::ScanSolver"),
+  solver_loader_("slam_toolbox", "karto::ScanSolver"),  // declared in solver_plugins.xml, <library path="ceres_solver_plugin">
   processor_type_(PROCESS),
   first_measurement_(true),
   process_near_pose_(nullptr),

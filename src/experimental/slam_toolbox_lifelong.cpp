@@ -139,7 +139,7 @@ void LifelongSlamToolbox::evaluateNodeDepreciation(
         float dx = it->GetVertex()->GetObject()->GetCorrectedPose().GetX() - range_scan->GetCorrectedPose().GetX();
         float dy = it->GetVertex()->GetObject()->GetCorrectedPose().GetY() - range_scan->GetCorrectedPose().GetY();
         float dist = sqrt( dx * dx + dy * dy );
-        RCLCPP_INFO(
+        RCLCPP_WARN(
             get_logger(),
             "Removing node %i from graph with score: %f and old score: %f @(%.3f, %.3f, %.3f) dist: %.3f",
             it->GetVertex()->GetObject()->GetUniqueId(), it->GetScore(),
@@ -321,7 +321,12 @@ void LifelongSlamToolbox::removeFromSlamGraph(
   Vertex<LocalizedRangeScan> * vertex)
 /*****************************************************************************/
 {
-RCLCPP_WARN(get_logger(), "removeFromSlamGraph()");
+
+  // TODO: Print out the vertex including the node, pose, edges
+  std::cout << "removeFromSlamGraph() @ vertex: " << vertex->GetObject() << "; pose: " << vertex->GetObject()->GetCorrectedPose()
+            << "; UniqueId: " << vertex->GetObject()->GetUniqueId() << "; stateId: " << vertex->GetObject()->GetStateId() << std::endl;
+  // TODO: Print out the content of the information matrix
+
   smapper_->getMapper()->MarginalizeNodeFromGraph(vertex);
   smapper_->getMapper()->GetMapperSensorManager()->RemoveScan(
     vertex->GetObject());

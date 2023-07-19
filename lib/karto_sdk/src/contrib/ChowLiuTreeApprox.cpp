@@ -103,9 +103,38 @@ std::cout << "2. else information_submatrix_aa / ab/ ba /bb created " << std::en
   }
 
   // (2) Compute Schur's complement over the variables that are kept.
-  return (information_submatrix_aa - information_submatrix_ba *
-          ComputeSparseInverse(information_submatrix_bb) *
-          information_submatrix_ab);
+  std::cout << "information_submatrix_aa.size(): " << information_submatrix_aa.size() << "; " << information_submatrix_aa.rows() << "; " << information_submatrix_aa.cols() << std::endl;
+  std::cout << "information_submatrix_ba.size(): " << information_submatrix_ba.size() << "; " << information_submatrix_ba.rows() << "; " << information_submatrix_ba.cols() << std::endl;
+  std::cout << "information_submatrix_ab.size(): " << information_submatrix_ab.size() << "; " << information_submatrix_ab.rows() << "; " << information_submatrix_ab.cols() << std::endl;
+  std::cout << "information_submatrix_ab.size(): " << information_submatrix_bb.size() << "; " << information_submatrix_bb.rows() << "; " << information_submatrix_bb.cols() << std::endl;
+  Eigen::SparseMatrix<double> aaa = ComputeSparseInverse(information_submatrix_bb);
+  std::cout << "inverse_bb:\n" << aaa << std::endl;
+
+  Eigen::SparseMatrix<double> MarginalInformationMatrix = (information_submatrix_aa - information_submatrix_ab * ComputeSparseInverse(information_submatrix_bb) * information_submatrix_ba);
+  std::cout << "ComputeSparseInverse:\n " << ComputeSparseInverse(information_submatrix_bb) << std::endl;
+  
+  // Record the information_matrix in information_matrix.csv
+  std::ofstream file_aa("information_submatrix_aa.csv");
+  if (file_aa.is_open()) {
+    file_aa << information_submatrix_aa << '\n';
+  }
+  std::ofstream file_ab("information_submatrix_ab.csv");
+  if (file_ab.is_open()) {
+    file_ab << information_submatrix_ab << '\n';
+  }
+  std::ofstream file_bb("information_submatrix_bb.csv");
+  if (file_bb.is_open()) {
+    file_bb << information_submatrix_bb << '\n';
+  }
+  std::ofstream file_mi("MarginalInformationMatrix.csv");
+  if (file_mi.is_open()) {
+    file_mi << MarginalInformationMatrix << '\n';
+  }
+
+  // return (information_submatrix_aa - information_submatrix_ba *
+  //         ComputeSparseInverse(information_submatrix_bb) *
+  //         information_submatrix_ab);
+  return MarginalInformationMatrix;
 }
 
 UncertainPose2 ComputeRelativePose2(
@@ -148,6 +177,10 @@ std::vector<Edge<LocalizedRangeScan> *> ComputeChowLiuTreeApproximation(
   const std::vector<Vertex<LocalizedRangeScan> *> & clique,
   const Eigen::SparseMatrix<double> & covariance_matrix)
 {
+
+  std::cout << "ComputeChowLiuTreeApproximation called with clique size: " << clique.size() << std::endl;
+//   std::cout << "covariance_matrix:\n" << covariance_matrix << std::endl;
+
   // (1) Build clique subgraph, weighting edges by the *negated* mutual
   // information between corresponding variables (so as to apply
   // Kruskal's minimum spanning tree algorithm down below).
@@ -155,7 +188,8 @@ std::vector<Edge<LocalizedRangeScan> *> ComputeChowLiuTreeApproximation(
     boost::vecS, boost::vecS, boost::undirectedS, boost::no_property,
     boost::property<boost::edge_weight_t, double>>;
   WeightedGraphT clique_subgraph(clique.size());
-  // Calculate the covariance submatrices for each pair of variables in the clique
+
+  // Calculate the dense covariance submatrices for each pair of variables in the clique
   // MI(X, Y) = 0.5 * log2(det(Σ_X) / det(Σ_X - Σ_XY * Σ_Y ^ -1 * Σ_YX))
   // where Σ_X is the covariance matrix for variable X, Σ_Y is the covariance matrix for variable Y, and Σ_XY is the covariance matrix for the pair of variables (X, Y).
   for (size_t i = 0; i < clique.size() - 1; ++i) {
@@ -169,13 +203,24 @@ std::vector<Edge<LocalizedRangeScan> *> ComputeChowLiuTreeApproximation(
       const auto covariance_submatrix_jj =
           Eigen::Matrix3d{covariance_matrix.block(j, j, 3, 3)};
       const double mutual_information =
-        0.5 * std::log2(covariance_submatrix_ii.determinant() / (
-            covariance_submatrix_ii - covariance_submatrix_ij *
-            covariance_submatrix_jj.inverse() *
-            covariance_submatrix_ji).determinant());
+          0.5 * std::log2(covariance_submatrix_ii.determinant() / 
+          ( covariance_submatrix_ii - covariance_submatrix_ij * covariance_submatrix_jj.inverse() * covariance_submatrix_ji ).determinant());
+
+      std::cout << "covariance_submatrix_ii:\n" << covariance_submatrix_ii << std::endl;
+      std::cout << "covariance_submatrix_ij:\n" << covariance_submatrix_ij << std::endl;
+      std::cout << "covariance_submatrix_ji:\n" << covariance_submatrix_ji << std::endl;
+      std::cout << "covariance_submatrix_jj:\n" << covariance_submatrix_jj << std::endl;
+
+      std::cout << "Determinant of covariance_submatrix_ii: " << covariance_submatrix_ii.determinant() << std::endl;
+      std::cout << "Determinant of covariance_submatrix_ij: " << covariance_submatrix_ij.determinant() << std::endl;
+      std::cout << "Determinant of covariance_submatrix_ji: " << covariance_submatrix_ji.determinant() << std::endl;
+      std::cout << "Determinant of covariance_submatrix_jj: " << covariance_submatrix_jj.determinant() << std::endl;
+
       boost::add_edge(i, j, -mutual_information, clique_subgraph);
+      std::cout << "Added edge between " << i << " and " << j << " with mutual information: " << mutual_information << std::endl;
     }
   }
+
   // (2) Find maximum mutual information spanning tree in the clique subgraph
   // (which best approximates the underlying joint probability distribution as
   // proved by Chow & Liu).
@@ -184,8 +229,11 @@ std::vector<Edge<LocalizedRangeScan> *> ComputeChowLiuTreeApproximation(
   std::vector<EdgeDescriptorT> minimum_spanning_tree_edges;
   boost::kruskal_minimum_spanning_tree(
       clique_subgraph, std::back_inserter(minimum_spanning_tree_edges));
+  std::cout << "Computed minimum spanning tree with " << minimum_spanning_tree_edges.size() << " edges." << std::endl;
+
   using VertexDescriptorT =
       boost::graph_traits<WeightedGraphT>::vertex_descriptor;
+
   // (3) Build tree approximation as an edge list, using the mean and
   // covariance of the marginal joint distribution between each variable
   // to recompute the nonlinear constraint (i.e. a 2D isometry) between them.
@@ -193,6 +241,8 @@ std::vector<Edge<LocalizedRangeScan> *> ComputeChowLiuTreeApproximation(
   for (const EdgeDescriptorT & edge_descriptor : minimum_spanning_tree_edges) {
     const VertexDescriptorT i = boost::source(edge_descriptor, clique_subgraph);
     const VertexDescriptorT j = boost::target(edge_descriptor, clique_subgraph);
+    std::cout << "Processing edge between " << i << " and " << j << std::endl;
+
     auto * edge = new Edge<LocalizedRangeScan>(clique[i], clique[j]);
     Eigen::Matrix<double, 6, 6> joint_pose_covariance_matrix;
     joint_pose_covariance_matrix <<  // marginalized from the larger matrix
@@ -212,6 +262,7 @@ std::vector<Edge<LocalizedRangeScan> *> ComputeChowLiuTreeApproximation(
         relative_pose.mean, relative_pose.covariance));
     chow_liu_tree_approximation.push_back(edge);
   }
+  std::cout << "Chow-Liu tree approximation has " << chow_liu_tree_approximation.size() << " edges." << std::endl;
   return chow_liu_tree_approximation;
 }
 

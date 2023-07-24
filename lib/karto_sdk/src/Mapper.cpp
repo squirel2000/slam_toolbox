@@ -1707,6 +1707,9 @@ Edge<LocalizedRangeScan> * MapperGraph::AddEdge(
     Edge<LocalizedRangeScan> * pEdge = *iter;
 
     if (pEdge->GetTarget() == v2->second) {
+      std::cout << "Current edge in v1 with " << v1->second->GetEdges().size() << " : from edge " << pEdge->GetSource()->GetObject()->GetUniqueId() << " to " << pEdge->GetTarget()->GetObject()->GetUniqueId() << std::endl;
+      std::cout << "Trying to add edge: from v1 " << v1->second->GetObject()->GetUniqueId() << " to v2 " << v2->second->GetObject()->GetUniqueId() << std::endl;
+      std::cout << "Edge already exists. Not adding new edge." << std::endl;
       rIsNewEdge = false;
       return pEdge;
     }
@@ -1715,7 +1718,16 @@ Edge<LocalizedRangeScan> * MapperGraph::AddEdge(
   Edge<LocalizedRangeScan> * pEdge = new Edge<LocalizedRangeScan>(v1->second, v2->second);
   Graph<LocalizedRangeScan>::AddEdge(pEdge);
   rIsNewEdge = true;
+  std::cout << "In AddEdge(), edge is added from " << pSourceScan->GetStateId() << " to " << pTargetScan->GetStateId() << std::endl;
   return pEdge;
+}
+
+// In the Graph class
+kt_bool MapperGraph::AddEdge(Edge<LocalizedRangeScan>* pEdge) {
+  std::cout << "AddEdge() in Mapper.cpp from " << pEdge->GetSource()->GetObject()->GetUniqueId() << " to " << pEdge->GetTarget()->GetObject()->GetUniqueId() << std::endl;
+  kt_bool rIsNewEdge = true;
+  Graph<LocalizedRangeScan>::AddEdge(pEdge);
+  return rIsNewEdge;
 }
 
 void MapperGraph::LinkScans(
@@ -3238,7 +3250,7 @@ kt_bool Mapper::MarginalizeNodeFromGraph(
   //   Journal of Robotics Research, vol. 31, no. 11, Sept. 2012,
   //   pp. 1219–1230, doi:10.1177/0278364912455072.
 
-  // (1) Fetch information matrix from solver. The information matrix is the inverse of the covariance matrix
+  // (1) Fetch information matrix from solver. The information matrix is the inverse of the covariance matrix (covariance = uncertainty)
   std::unordered_map<int, Eigen::Index> ordering;
   const Eigen::SparseMatrix<double> information_matrix =
       m_pScanOptimizer->GetInformationMatrix(&ordering);
@@ -3246,7 +3258,7 @@ kt_bool Mapper::MarginalizeNodeFromGraph(
   // Record the information_matrix in information_matrix.csv
   std::ofstream file("information_matrix.csv");
   if (file.is_open()) {
-    file << information_matrix << '\n';
+    file << information_matrix << '\n'; // Jacobian.transpose() * Jacobian = (111x84).transpose() * (111x84) = 84x84
   }
 
   // (2) Marginalize variable from information matrix.
@@ -3259,44 +3271,43 @@ kt_bool Mapper::MarginalizeNodeFromGraph(
   auto block_index_of_test = [&](kt_int32s Id){
     return ordering[Id];
   };
-  for (kt_int32s index =0; index < 15; index++) {
-    std::cout << block_index_of_test(index) << "; " ;
+  for (kt_int32s index =0; index < 15; index++) { // The vertex of UniqueId == 0, which is the base of the pose graph, will not be considered?? No, it should be 3
+    std::cout << block_index_of_test(index) << "; "; // 83; 6; 9; 12; 15; 18; 21; 24; 27; 30; 33; 36; 39; 42; 45;  -> The first element should be 3
   }
+  std::cout << std::endl;
 
   
   // TODO: Check the "block_index_of" method, which always returns 0, that is the 'topLeftCorner' submatrix
-  const Eigen::Index marginalized_block_index = block_index_of(vertex_to_marginalize);
+  const Eigen::Index marginalized_block_index = block_index_of(vertex_to_marginalize);  // e.g. vertex(UniqueId = 15) -> marginalized_block_index = 48
   const Eigen::SparseMatrix<double> marginal_information_matrix =
       contrib::ComputeMarginalInformationMatrix(
-          information_matrix, marginalized_block_index, block_size);  // 0(69), 3
-  std::cout << "(2) -> marginalized_block_index " << marginalized_block_index << "; " << vertex_to_marginalize->GetObject()->GetUniqueId() << std::endl;  // 0, 69
+          information_matrix, marginalized_block_index, block_size);  // 48, 3
+  std::cout << "(2) -> marginalized_block_index " << marginalized_block_index << "; " << vertex_to_marginalize->GetObject()->GetUniqueId() << std::endl;  // 48, 15
   std::cout << "ordering[69] = marginalized_block_index: " << ordering[vertex_to_marginalize->GetObject()->GetUniqueId()] << " = " << marginalized_block_index << std::endl;
   std::cout << "marginal_information_matrix.size(): " << marginal_information_matrix.size() << "; " << marginal_information_matrix.rows() << "; " << marginal_information_matrix.cols() << std::endl;
 
   // (3) Compute marginal covariance *local* to the elimination clique (adjacent vertices)
   // i.e. by only inverting the relevant marginal information submatrix.
   // This is an approximation for the sake of performance.
-  std::vector<Vertex<LocalizedRangeScan> *> elimination_clique =
+  std::vector<Vertex<LocalizedRangeScan> *> elimination_clique =  // UiqueId: 14, 16
       vertex_to_marginalize->GetAdjacentVertices();
   std::vector<Eigen::Index> elimination_clique_indices;  // need all indices
-  elimination_clique_indices.reserve(elimination_clique.size() * block_size);
+  elimination_clique_indices.reserve(elimination_clique.size() * block_size); // 2 * 3 (only reserve, but size = 0)
   std::cout << "eliminate clique size: " << elimination_clique.size()  << "; block_size: " << block_size << "; elimination clique indices: " << elimination_clique_indices.size() << std::endl; // 2, 3, 0
   for (Vertex<LocalizedRangeScan> * vertex : elimination_clique) {
     Eigen::Index block_index = block_index_of(vertex);
-    std::cout << "block_index: " << block_index << std::endl;
-    if (block_index > marginalized_block_index) { // > 0
+    std::cout << "vertex UniqueId: " << vertex->GetObject()->GetUniqueId() << "; block_index: " << block_index << "; marginalize_block_index: " << marginalized_block_index << std::endl;
+    if (block_index > marginalized_block_index) { // 45, 51 > marginalized_block_index = 48
       block_index -= block_size;
     }
-    std::cout << "block_index_of: " << block_index_of(vertex) << "; block_index: " << block_index << std::endl;
     for (Eigen::Index offset = 0; offset < block_size; ++offset) {
-      elimination_clique_indices.push_back(block_index + offset);
+      elimination_clique_indices.push_back(block_index + offset);   // 45, 46, 47;  48, 49, 50
     }
-    std::cout << "eliminate clique indices size: " << elimination_clique_indices.size() << std::endl;
   }
   const Eigen::SparseMatrix<double> local_marginal_covariance_matrix =
-      contrib::ComputeSparseInverse(
-          contrib::ArrangeView(marginal_information_matrix,
-                               elimination_clique_indices,
+      contrib::ComputeSparseInverse(  // Extract a 6x6 submatrix from the marinal_information_matrix (45~50 x 45~50), and compute its inverse
+          contrib::ArrangeView(marginal_information_matrix, // 81 x 81
+            elimination_clique_indices,  // 45, 46, 47,  48, 49, 50
                                elimination_clique_indices).eval());
   std::cout << "local_marginal_covariance_matrix:\n" << local_marginal_covariance_matrix << std::endl;
   // std::cout << "local_marginal_covariance_matrix.nonZeros(): " << local_marginal_covariance_matrix.nonZeros() << std::endl;
@@ -3322,7 +3333,7 @@ kt_bool Mapper::MarginalizeNodeFromGraph(
   RemoveNodeFromGraph(vertex_to_marginalize);
 
   // (5) Remove all edges in the subgraph induced by the elimination clique.
-  for (Vertex<LocalizedRangeScan> * vertex : elimination_clique) {
+  for (Vertex<LocalizedRangeScan> * vertex : elimination_clique) {  // vertex: 14, 16
     for (Edge<LocalizedRangeScan> * edge : vertex->GetEdges()) {
       Vertex<LocalizedRangeScan> * other_vertex =
           edge->GetSource() == vertex ?
@@ -3340,13 +3351,14 @@ kt_bool Mapper::MarginalizeNodeFromGraph(
   // (6) Compute Chow-Liu tree approximation to the elimination clique.
   std::vector<Edge<LocalizedRangeScan> *> chow_liu_tree_approximation =
       contrib::ComputeChowLiuTreeApproximation(
-          elimination_clique, local_marginal_covariance_matrix);
-  std::cout << "6. chow_liu_tree: " << elimination_clique.size() << " * " << local_marginal_covariance_matrix.size() << " = " << chow_liu_tree_approximation.size() << std::endl;
+        elimination_clique, local_marginal_covariance_matrix);  // elimination_clique(14, 16), local_marginal_covariance_matrix(6x6)
 
   // (7) Push tree edges to graph and solver (as constraints).
   for (Edge<LocalizedRangeScan> * edge : chow_liu_tree_approximation) {
-    assert(m_pGraph->AddEdge(edge));
+    // In any case, it's good to know that removing the assert() resolved the issue. The assert() function is primarily used for debugging purposes during development and is often removed or disabled in production code. 
+    m_pGraph->AddEdge(edge);  // assert(m_pGraph->AddEdge(edge));
     m_pScanOptimizer->AddConstraint(edge);
+    std::cout << "Add edge from node " << edge->GetSource()->GetObject()->GetUniqueId() << " to node " << edge->GetTarget()->GetObject()->GetUniqueId() << std::endl;
   }
 
   return true;

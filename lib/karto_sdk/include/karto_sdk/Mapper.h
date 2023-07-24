@@ -641,7 +641,9 @@ public:
    */
   inline void AddEdge(Edge<T> * pEdge)
   {
+    std::cout << "AddEdge() size " << m_Edges.size() << " ; from " << pEdge->GetSource() << " to " << pEdge->GetTarget() << std::endl;
     m_Edges.push_back(pEdge);
+    std::cout << "AddEdge() size " << m_Edges.size() << std::endl;
   }
 
   /**

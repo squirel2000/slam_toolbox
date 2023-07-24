@@ -19,28 +19,30 @@ Eigen::SparseMatrix<double> ComputeMarginalInformationMatrix(
 {
   const Eigen::Index dimension = information_matrix.outerSize();
   assert(dimension == information_matrix.innerSize());  // must be square
-  const Eigen::Index marginal_dimension = dimension - variables_dimension;  // 255 = 258 - 3
-  const Eigen::Index last_variable_index = dimension - variables_dimension; // 255 = 258 -3
+  const Eigen::Index marginal_dimension = dimension - variables_dimension;  // 81 = 84 - 3
+  const Eigen::Index last_variable_index = dimension - variables_dimension; // 81 = 84 -3
+
+  // URL: https://vnav.mit.edu/material/24-SLAM2-FactorGraphsAndMarginalization-slides.pdf
   // (1) Break up information matrix based on which are the variables
   // kept (a) and which is the variable discarded (b).
   Eigen::SparseMatrix<double>
       information_submatrix_aa, information_submatrix_ab,
       information_submatrix_ba, information_submatrix_bb;
-  if (discarded_variable_index == 0) {
+  if (discarded_variable_index == 0) {  // The first one (0)
     information_submatrix_aa =
         information_matrix.bottomRightCorner(
-            marginal_dimension, marginal_dimension);    // 255, 255
+            marginal_dimension, marginal_dimension);    // 81, 81
     information_submatrix_ab =
         information_matrix.bottomLeftCorner(
-            marginal_dimension, variables_dimension);   // 255, 3
+            marginal_dimension, variables_dimension);   // 81, 3
     information_submatrix_ba =
         information_matrix.topRightCorner(
-            variables_dimension, marginal_dimension);   // 3, 255
+            variables_dimension, marginal_dimension);   // 3, 81
     information_submatrix_bb =
         information_matrix.topLeftCorner(
             variables_dimension, variables_dimension);  // 3, 3
-  } else if (discarded_variable_index == last_variable_index) {
-std::cout << "2. else-if information_submatrix_aa / ab/ ba /bb created " << std::endl;
+  } else if (discarded_variable_index == last_variable_index) { // 81
+std::cout << "2. else-if information_submatrix_aa / ab/ ba / bb created " << std::endl;
     information_submatrix_aa =
         information_matrix.topLeftCorner(
             marginal_dimension, marginal_dimension);
@@ -54,7 +56,7 @@ std::cout << "2. else-if information_submatrix_aa / ab/ ba /bb created " << std:
         information_matrix.bottomRightCorner(
             variables_dimension, variables_dimension);
   } else {
-std::cout << "2. else information_submatrix_aa / ab/ ba /bb created " << std::endl;
+      std::cout << "2. Discard the central node with UniqueId: " << discarded_variable_index << std::endl;
     const Eigen::Index next_variable_index =
         discarded_variable_index + variables_dimension;
     information_submatrix_aa = StackVertically(
@@ -107,9 +109,6 @@ std::cout << "2. else information_submatrix_aa / ab/ ba /bb created " << std::en
   std::cout << "information_submatrix_ba.size(): " << information_submatrix_ba.size() << "; " << information_submatrix_ba.rows() << "; " << information_submatrix_ba.cols() << std::endl;
   std::cout << "information_submatrix_ab.size(): " << information_submatrix_ab.size() << "; " << information_submatrix_ab.rows() << "; " << information_submatrix_ab.cols() << std::endl;
   std::cout << "information_submatrix_ab.size(): " << information_submatrix_bb.size() << "; " << information_submatrix_bb.rows() << "; " << information_submatrix_bb.cols() << std::endl;
-  Eigen::SparseMatrix<double> aaa = ComputeSparseInverse(information_submatrix_bb);
-  std::cout << "inverse_bb:\n" << aaa << std::endl;
-
   Eigen::SparseMatrix<double> MarginalInformationMatrix = (information_submatrix_aa - information_submatrix_ab * ComputeSparseInverse(information_submatrix_bb) * information_submatrix_ba);
   std::cout << "ComputeSparseInverse:\n " << ComputeSparseInverse(information_submatrix_bb) << std::endl;
   
@@ -174,13 +173,9 @@ UncertainPose2 ComputeRelativePose2(
 }
 
 std::vector<Edge<LocalizedRangeScan> *> ComputeChowLiuTreeApproximation(
-  const std::vector<Vertex<LocalizedRangeScan> *> & clique,
+    const std::vector<Vertex<LocalizedRangeScan>*>& clique, // elimination_clique(14, 16), local_marginal_covariance_matrix(6x6)
   const Eigen::SparseMatrix<double> & covariance_matrix)
 {
-
-  std::cout << "ComputeChowLiuTreeApproximation called with clique size: " << clique.size() << std::endl;
-//   std::cout << "covariance_matrix:\n" << covariance_matrix << std::endl;
-
   // (1) Build clique subgraph, weighting edges by the *negated* mutual
   // information between corresponding variables (so as to apply
   // Kruskal's minimum spanning tree algorithm down below).
@@ -188,20 +183,21 @@ std::vector<Edge<LocalizedRangeScan> *> ComputeChowLiuTreeApproximation(
     boost::vecS, boost::vecS, boost::undirectedS, boost::no_property,
     boost::property<boost::edge_weight_t, double>>;
   WeightedGraphT clique_subgraph(clique.size());
+  constexpr Eigen::Index block_size = 3;
 
   // Calculate the dense covariance submatrices for each pair of variables in the clique
   // MI(X, Y) = 0.5 * log2(det(Σ_X) / det(Σ_X - Σ_XY * Σ_Y ^ -1 * Σ_YX))
   // where Σ_X is the covariance matrix for variable X, Σ_Y is the covariance matrix for variable Y, and Σ_XY is the covariance matrix for the pair of variables (X, Y).
-  for (size_t i = 0; i < clique.size() - 1; ++i) {
+  for (size_t i = 0; i < clique.size() - 1; ++i) {  // clique.size() = 2
     for (size_t j = i + 1; j < clique.size(); ++j) {
       const auto covariance_submatrix_ii =
-          Eigen::Matrix3d{covariance_matrix.block(i, i, 3, 3)};
+          Eigen::Matrix3d{ covariance_matrix.block(i * block_size, i * block_size, 3, 3) };
       const auto covariance_submatrix_ij =
-          Eigen::Matrix3d{covariance_matrix.block(i, j, 3, 3)};
+          Eigen::Matrix3d{ covariance_matrix.block(i * block_size, j * block_size, 3, 3) };
       const auto covariance_submatrix_ji =
-          Eigen::Matrix3d{covariance_matrix.block(j, i, 3, 3)};
+          Eigen::Matrix3d{ covariance_matrix.block(j * block_size, i * block_size, 3, 3) };
       const auto covariance_submatrix_jj =
-          Eigen::Matrix3d{covariance_matrix.block(j, j, 3, 3)};
+          Eigen::Matrix3d{ covariance_matrix.block(j * block_size, j * block_size, 3, 3) };
       const double mutual_information =
           0.5 * std::log2(covariance_submatrix_ii.determinant() / 
           ( covariance_submatrix_ii - covariance_submatrix_ij * covariance_submatrix_jj.inverse() * covariance_submatrix_ji ).determinant());
@@ -219,6 +215,19 @@ std::vector<Edge<LocalizedRangeScan> *> ComputeChowLiuTreeApproximation(
       boost::add_edge(i, j, -mutual_information, clique_subgraph);
       std::cout << "Added edge between " << i << " and " << j << " with mutual information: " << mutual_information << std::endl;
     }
+    boost::graph_traits<WeightedGraphT>::vertex_iterator vi, vi_end;
+    for (boost::tie(vi, vi_end) = boost::vertices(clique_subgraph); vi != vi_end; ++vi) {
+        std::cout << "Vertex: " << *vi << std::endl;
+    }
+
+    // Print all edges and their weights
+    boost::graph_traits<WeightedGraphT>::edge_iterator ei, ei_end;
+    for (boost::tie(ei, ei_end) = boost::edges(clique_subgraph); ei != ei_end; ++ei) {
+        std::cout << "Edge: (" << boost::source(*ei, clique_subgraph)
+            << ", " << boost::target(*ei, clique_subgraph)
+            << ") Weight: " << boost::get(boost::edge_weight, clique_subgraph, *ei)
+            << std::endl;
+    }
   }
 
   // (2) Find maximum mutual information spanning tree in the clique subgraph
@@ -229,7 +238,7 @@ std::vector<Edge<LocalizedRangeScan> *> ComputeChowLiuTreeApproximation(
   std::vector<EdgeDescriptorT> minimum_spanning_tree_edges;
   boost::kruskal_minimum_spanning_tree(
       clique_subgraph, std::back_inserter(minimum_spanning_tree_edges));
-  std::cout << "Computed minimum spanning tree with " << minimum_spanning_tree_edges.size() << " edges." << std::endl;
+  std::cout << "\nComputed minimum spanning tree with " << minimum_spanning_tree_edges.size() << " edges." << std::endl;
 
   using VertexDescriptorT =
       boost::graph_traits<WeightedGraphT>::vertex_descriptor;
@@ -241,15 +250,15 @@ std::vector<Edge<LocalizedRangeScan> *> ComputeChowLiuTreeApproximation(
   for (const EdgeDescriptorT & edge_descriptor : minimum_spanning_tree_edges) {
     const VertexDescriptorT i = boost::source(edge_descriptor, clique_subgraph);
     const VertexDescriptorT j = boost::target(edge_descriptor, clique_subgraph);
-    std::cout << "Processing edge between " << i << " and " << j << std::endl;
+    std::cout << "Processing edge between " << i << " and " << j << std::endl;  // i=0, j=1
 
     auto * edge = new Edge<LocalizedRangeScan>(clique[i], clique[j]);
     Eigen::Matrix<double, 6, 6> joint_pose_covariance_matrix;
     joint_pose_covariance_matrix <<  // marginalized from the larger matrix
-        Eigen::Matrix3d{covariance_matrix.block(i, i, 3, 3)},
-        Eigen::Matrix3d{covariance_matrix.block(i, j, 3, 3)},
-        Eigen::Matrix3d{covariance_matrix.block(j, i, 3, 3)},
-        Eigen::Matrix3d{covariance_matrix.block(j, j, 3, 3)};
+        Eigen::Matrix3d{ covariance_matrix.block(i * block_size, i * block_size, block_size, block_size) },
+        Eigen::Matrix3d{ covariance_matrix.block(i * block_size, j * block_size, block_size, block_size) },
+        Eigen::Matrix3d{ covariance_matrix.block(j * block_size, i * block_size, block_size, block_size) },
+        Eigen::Matrix3d{ covariance_matrix.block(j * block_size, j * block_size, block_size, block_size) };
     LocalizedRangeScan * source_scan = edge->GetSource()->GetObject();
     LocalizedRangeScan * target_scan = edge->GetTarget()->GetObject();
     const UncertainPose2 relative_pose =
@@ -261,8 +270,15 @@ std::vector<Edge<LocalizedRangeScan> *> ComputeChowLiuTreeApproximation(
         target_scan->GetCorrectedPose(),
         relative_pose.mean, relative_pose.covariance));
     chow_liu_tree_approximation.push_back(edge);
+
+    std::cout << "edge from " << edge->GetSource()->GetObject()->GetUniqueId() 
+                << " to " << edge->GetTarget()->GetObject()->GetUniqueId() << std::endl;
+    std::cout << "joint_pose_covariance_matrix:\n" << joint_pose_covariance_matrix << std::endl;
+    // relative_pose.mean is a 3 - element vector representing the mean of the relative pose(x, y, theta) from the source node to the target node.The values of x, y represent the translation in meters, and theta represents the rotation in radians.
+    std::cout << "relative_pose.mean:\n" << relative_pose.mean << std::endl;
+    std::cout << "relative_pose.covariance:\n" << relative_pose.covariance << std::endl;
+    
   }
-  std::cout << "Chow-Liu tree approximation has " << chow_liu_tree_approximation.size() << " edges." << std::endl;
   return chow_liu_tree_approximation;
 }
 

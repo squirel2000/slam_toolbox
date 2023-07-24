@@ -241,24 +241,18 @@ Eigen::SparseMatrix<double> CeresSolver::GetInformationMatrix(
     Eigen::Index index = 0u;
     std::vector<double*> parameter_blocks;
     problem_->GetParameterBlocks(&parameter_blocks);
-
-    // std::cout << "nodes_inverted_: " << nodes_inverted_ << "; size: " << nodes_inverted_->size() << std::endl;
-    // for (const auto& pair : *nodes_inverted_) {
-    //   std::cout << "Unique ID: " << *(pair.first) << ", Index: " << pair.second << std::endl;  // Unique ID: -1.50289, Index: 1
-    // }
-
-    std::cout << "(*nodes_inverted_)[block]: index. block | *block -> (*nodes_inverted_) -> (*ordering) " << std::endl;
+    // std::cout << "(*nodes_inverted_)[block]: index. block | *block -> (*nodes_inverted_)[block] -> (*ordering) " << std::endl;
     for (auto * block : parameter_blocks) {
       // 'nodes_inverted_' is presumably a map from blocks to nodes. 
       // The brackets [] are used for accessing elements in a map or an array. The parentheses () are used for dereferencing pointers and for function/method calls. 
       // In this case, ordering and nodes_inverted_ are pointers to maps, so (*ordering) and (*nodes_inverted_) are the maps themselves.
       (*ordering)[(*nodes_inverted_)[block]] = index++;
-      std::cout << index << ". " << block << " | "<< (*block) << " -> " << (*nodes_inverted_)[block] << " -> " << (*ordering)[(*nodes_inverted_)[block]] << "; " << std::endl;
+      // std::cout << index << ". " << block << " | "<< (*block) << " -> " << (*nodes_inverted_)[block] << " -> " << (*ordering)[(*nodes_inverted_)[block]] << "; " << std::endl;
     }
 
-    // GetInformationMatrix() : parameter_block size : 78; ordering size : 1; index: 78
+    // GetInformationMatrix(): parameter_block size: 84; ordering size: 28; index: 84 (Since 3 blocks map to 1 ordering, 28*3 = 84)
     std::cout << "GetInformationMatrix(): parameter_block size: " << parameter_blocks.size() 
-      << "; ordering size: " << ordering->size() << "; index: " << index << std::endl;  // GetInformationMatrix(): parameter_block size: 177; ordering size: 59; index: 177
+      << "; ordering size: " << ordering->size() << "; index: " << index << std::endl; 
     // for (const auto& pair : *ordering) {
     //   std::cout << "Unique ID: " << pair.first << ", Index: " << pair.second << std::endl;
     // }
@@ -276,13 +270,14 @@ Eigen::SparseMatrix<double> CeresSolver::GetInformationMatrix(
       CRSMatrixIterator::begin(jacobian_data),
       CRSMatrixIterator::end(jacobian_data));
 
+  // jacobian_data (111, 84):
   std::cout << "jacobian_data (" << jacobian_data.num_rows << ", " << jacobian_data.num_cols << "):\n" << std::endl;
   // for (auto& it: jacobian_data) {
   //   std::cout << it.
   //   jacobian_data.values
   // }
 
-  return jacobian.transpose() * jacobian;
+  return jacobian.transpose() * jacobian; // (84x111) * (111x84)
 }
 
 /*****************************************************************************/

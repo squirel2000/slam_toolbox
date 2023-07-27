@@ -20,7 +20,7 @@
 #include <memory>
 #include "slam_toolbox/experimental/slam_toolbox_lifelong.hpp"
 
-#define KARTO_DEBUG
+// #define KARTO_DEBUG
 
 namespace slam_toolbox
 {
@@ -124,7 +124,7 @@ void LifelongSlamToolbox::evaluateNodeDepreciation(
     const BoundingBox2 & bb = range_scan->GetBoundingBox(); // bb: the max. scanning range of this range_scan 
     const Size2<double> bb_size = bb.GetSize();
     double radius = sqrt(bb_size.GetWidth() * bb_size.GetWidth() + bb_size.GetHeight() * bb_size.GetHeight()) / 2.0;  // hypotenuse of the bounding box / 2
-    Vertices near_scan_vertices = FindScansWithinRadius(range_scan, 1.0); // Limit the radius to 1.0 (m) instead of the radius of the bounding box
+    Vertices near_scan_vertices = FindScansWithinRadius(range_scan, radius); // Limit the radius to 1.0 (m) instead of the radius of the bounding box
     // -> bb_size: (20.5305, 16.353); radius: 13.1237; 9 vertices around 2.97644 0.992615 6.33001e-06
     
     // Vertices near_scan_vertices = FindScansWithinRadius(range_scan, radius);

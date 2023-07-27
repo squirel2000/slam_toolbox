@@ -679,6 +679,7 @@ ComputeSparseInverse(const Eigen::SparseMatrix<Scalar, Options, StorageIndex>& m
   SolverType solver;
   solver.compute(matrix);
   if (solver.info() != Eigen::Success) {  // Check if the decomposition is successful
+    std::cout << "Decomposition is failed, and return the original matrix" << std::endl;
     return matrix;  // return the original matrix
   }
   MatrixType I(dimension, dimension);

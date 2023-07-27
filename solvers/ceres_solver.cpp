@@ -338,7 +338,6 @@ void CeresSolver::AddNode(karto::Vertex<karto::LocalizedRangeScan> * pVertex)
   }
 
   karto::Pose2 pose = pVertex->GetObject()->GetCorrectedPose();
-  // std::array<double, 3> pose2d = { pose.GetX(), pose.GetY(), pose.GetHeading() };
   Eigen::Vector3d pose2d( pose.GetX(), pose.GetY(), pose.GetHeading() );
 
   const int unique_id = pVertex->GetObject()->GetUniqueId();
@@ -346,7 +345,6 @@ void CeresSolver::AddNode(karto::Vertex<karto::LocalizedRangeScan> * pVertex)
   boost::mutex::scoped_lock lock(nodes_mutex_);
 
   // Insert the pose into nodes_ and get an iterator pointing to the newly inserted element
-  // auto node_insert_result = nodes_->insert(std::pair<int, Eigen::Vector3d>(unique_id, pose_vec));
   auto node_insert_result = nodes_->insert(std::pair<int, Eigen::Vector3d>(unique_id, pose2d));
   auto node_iterator = node_insert_result.first;
 

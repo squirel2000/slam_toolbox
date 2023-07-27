@@ -42,7 +42,6 @@ Eigen::SparseMatrix<double> ComputeMarginalInformationMatrix(
         information_matrix.topLeftCorner(
             variables_dimension, variables_dimension);  // 3, 3
   } else if (discarded_variable_index == last_variable_index) { // 81
-std::cout << "2. else-if information_submatrix_aa / ab/ ba / bb created " << std::endl;
     information_submatrix_aa =
         information_matrix.topLeftCorner(
             marginal_dimension, marginal_dimension);
@@ -56,7 +55,6 @@ std::cout << "2. else-if information_submatrix_aa / ab/ ba / bb created " << std
         information_matrix.bottomRightCorner(
             variables_dimension, variables_dimension);
   } else {
-      std::cout << "2. Discard the central node with UniqueId: " << discarded_variable_index << std::endl;
     const Eigen::Index next_variable_index =
         discarded_variable_index + variables_dimension;
     information_submatrix_aa = StackVertically(
@@ -105,12 +103,8 @@ std::cout << "2. else-if information_submatrix_aa / ab/ ba / bb created " << std
   }
 
   // (2) Compute Schur's complement over the variables that are kept.
-  std::cout << "information_submatrix_aa.size(): " << information_submatrix_aa.size() << "; " << information_submatrix_aa.rows() << "; " << information_submatrix_aa.cols() << std::endl;
-  std::cout << "information_submatrix_ba.size(): " << information_submatrix_ba.size() << "; " << information_submatrix_ba.rows() << "; " << information_submatrix_ba.cols() << std::endl;
-  std::cout << "information_submatrix_ab.size(): " << information_submatrix_ab.size() << "; " << information_submatrix_ab.rows() << "; " << information_submatrix_ab.cols() << std::endl;
-  std::cout << "information_submatrix_ab.size(): " << information_submatrix_bb.size() << "; " << information_submatrix_bb.rows() << "; " << information_submatrix_bb.cols() << std::endl;
   Eigen::SparseMatrix<double> MarginalInformationMatrix = (information_submatrix_aa - information_submatrix_ab * ComputeSparseInverse(information_submatrix_bb) * information_submatrix_ba);
-  std::cout << "ComputeSparseInverse:\n " << ComputeSparseInverse(information_submatrix_bb) << std::endl;
+  std::cout << "ComputeSparseInverse for information_submatrix_bb:\n " << ComputeSparseInverse(information_submatrix_bb) << std::endl;
   
   // Record the information_matrix in information_matrix.csv
   std::ofstream file_aa("information_submatrix_aa.csv");
@@ -202,31 +196,13 @@ std::vector<Edge<LocalizedRangeScan> *> ComputeChowLiuTreeApproximation(
           0.5 * std::log2(covariance_submatrix_ii.determinant() / 
           ( covariance_submatrix_ii - covariance_submatrix_ij * covariance_submatrix_jj.inverse() * covariance_submatrix_ji ).determinant());
 
-      std::cout << "covariance_submatrix_ii:\n" << covariance_submatrix_ii << std::endl;
-      std::cout << "covariance_submatrix_ij:\n" << covariance_submatrix_ij << std::endl;
-      std::cout << "covariance_submatrix_ji:\n" << covariance_submatrix_ji << std::endl;
-      std::cout << "covariance_submatrix_jj:\n" << covariance_submatrix_jj << std::endl;
-
-      std::cout << "Determinant of covariance_submatrix_ii: " << covariance_submatrix_ii.determinant() << std::endl;
-      std::cout << "Determinant of covariance_submatrix_ij: " << covariance_submatrix_ij.determinant() << std::endl;
-      std::cout << "Determinant of covariance_submatrix_ji: " << covariance_submatrix_ji.determinant() << std::endl;
-      std::cout << "Determinant of covariance_submatrix_jj: " << covariance_submatrix_jj.determinant() << std::endl;
+      std::cout << "covariance_submatrix_ii with determinant: " << covariance_submatrix_ii.determinant() << " :\n" << covariance_submatrix_ii << std::endl;
+      std::cout << "covariance_submatrix_ij with determinant: " << covariance_submatrix_ij.determinant() << " :\n" << covariance_submatrix_ij << std::endl;
+      std::cout << "covariance_submatrix_ji with determinant: " << covariance_submatrix_ji.determinant() << " :\n" << covariance_submatrix_ji << std::endl;
+      std::cout << "covariance_submatrix_jj with determinant: " << covariance_submatrix_jj.determinant() << " :\n" << covariance_submatrix_jj << std::endl;
 
       boost::add_edge(i, j, -mutual_information, clique_subgraph);
-      std::cout << "Added edge between " << i << " and " << j << " with mutual information: " << mutual_information << std::endl;
-    }
-    boost::graph_traits<WeightedGraphT>::vertex_iterator vi, vi_end;
-    for (boost::tie(vi, vi_end) = boost::vertices(clique_subgraph); vi != vi_end; ++vi) {
-        std::cout << "Vertex: " << *vi << std::endl;
-    }
-
-    // Print all edges and their weights
-    boost::graph_traits<WeightedGraphT>::edge_iterator ei, ei_end;
-    for (boost::tie(ei, ei_end) = boost::edges(clique_subgraph); ei != ei_end; ++ei) {
-        std::cout << "Edge: (" << boost::source(*ei, clique_subgraph)
-            << ", " << boost::target(*ei, clique_subgraph)
-            << ") Weight: " << boost::get(boost::edge_weight, clique_subgraph, *ei)
-            << std::endl;
+      std::cout << "Added edge (" << i << ", " << j << ") with mutual information (weight): " << -mutual_information << std::endl;
     }
   }
 

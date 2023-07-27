@@ -1724,7 +1724,6 @@ Edge<LocalizedRangeScan> * MapperGraph::AddEdge(
 
 // In the Graph class
 kt_bool MapperGraph::AddEdge(Edge<LocalizedRangeScan>* pEdge) {
-  std::cout << "AddEdge() in Mapper.cpp from " << pEdge->GetSource()->GetObject()->GetUniqueId() << " to " << pEdge->GetTarget()->GetObject()->GetUniqueId() << std::endl;
   kt_bool rIsNewEdge = true;
   Graph<LocalizedRangeScan>::AddEdge(pEdge);
   return rIsNewEdge;
@@ -3261,30 +3260,17 @@ kt_bool Mapper::MarginalizeNodeFromGraph(
     file << information_matrix << '\n'; // Jacobian.transpose() * Jacobian = (111x84).transpose() * (111x84) = 84x84
   }
 
-  // (2) Marginalize variable from information matrix.
+  // (2) Marginalize the block w.r.t. vertex_to_marginalize from information matrix.
   constexpr Eigen::Index block_size = 3;
-  // The 'block_index_of' function is used to find the index of a specific node in the information matrix.
+  // The lambda function of 'block_index_of' is used to find the index of a specific vertex in the information matrix.
   auto block_index_of = [&](Vertex<LocalizedRangeScan> * vertex) {
     return ordering[vertex->GetObject()->GetUniqueId()];
   };
-
-  auto block_index_of_test = [&](kt_int32s Id){
-    return ordering[Id];
-  };
-  for (kt_int32s index =0; index < 15; index++) { // The vertex of UniqueId == 0, which is the base of the pose graph, will not be considered?? No, it should be 3
-    std::cout << block_index_of_test(index) << "; "; // 83; 6; 9; 12; 15; 18; 21; 24; 27; 30; 33; 36; 39; 42; 45;  -> The first element should be 3
-  }
-  std::cout << std::endl;
-
-  
-  // TODO: Check the "block_index_of" method, which always returns 0, that is the 'topLeftCorner' submatrix
   const Eigen::Index marginalized_block_index = block_index_of(vertex_to_marginalize);  // e.g. vertex(UniqueId = 15) -> marginalized_block_index = 48
   const Eigen::SparseMatrix<double> marginal_information_matrix =
       contrib::ComputeMarginalInformationMatrix(
           information_matrix, marginalized_block_index, block_size);  // 48, 3
   std::cout << "(2) -> marginalized_block_index " << marginalized_block_index << "; " << vertex_to_marginalize->GetObject()->GetUniqueId() << std::endl;  // 48, 15
-  std::cout << "ordering[69] = marginalized_block_index: " << ordering[vertex_to_marginalize->GetObject()->GetUniqueId()] << " = " << marginalized_block_index << std::endl;
-  std::cout << "marginal_information_matrix.size(): " << marginal_information_matrix.size() << "; " << marginal_information_matrix.rows() << "; " << marginal_information_matrix.cols() << std::endl;
 
   // (3) Compute marginal covariance *local* to the elimination clique (adjacent vertices)
   // i.e. by only inverting the relevant marginal information submatrix.
@@ -3309,27 +3295,9 @@ kt_bool Mapper::MarginalizeNodeFromGraph(
           contrib::ArrangeView(marginal_information_matrix, // 81 x 81
             elimination_clique_indices,  // 45, 46, 47,  48, 49, 50
                                elimination_clique_indices).eval());
-  std::cout << "local_marginal_covariance_matrix:\n" << local_marginal_covariance_matrix << std::endl;
-  // std::cout << "local_marginal_covariance_matrix.nonZeros(): " << local_marginal_covariance_matrix.nonZeros() << std::endl;
-  // for (int k = 0; k < local_marginal_covariance_matrix.outerSize(); ++k)
-  //   for (Eigen::SparseMatrix<double>::InnerIterator it(local_marginal_covariance_matrix, k); it; ++it) {
-  //     std::cout << "Element at (" << it.row() << "," << it.col() << ") is non-zero and its value is " << it.value() << std::endl;
-  //   }
-  // Eigen::MatrixXd dense_matrix = Eigen::MatrixXd(local_marginal_covariance_matrix);
-  // if (dense_matrix.isApprox(dense_matrix.transpose())) {
-  //   std::cout << "The matrix is symmetric." << std::endl;
-  // } else {
-  //   std::cout << "The matrix is not symmetric." << std::endl;
-  // }
-  // Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigen_solver(dense_matrix);
-  // if (eigen_solver.eigenvalues().minCoeff() > 0) {
-  //   std::cout << "The matrix is positive definite." << std::endl;
-  // } else {
-  //   std::cout << "The matrix is not positive definite." << std::endl;
-  // }
+  std::cout << "local_marginal_covariance_matrix around vertex " << vertex_to_marginalize->GetObject()->GetUniqueId() << " :\n" << local_marginal_covariance_matrix << std::endl;
 
   // (4) Remove node for marginalized variable.
-  // Why "remove the node from graph" still base on the input of "vertex_to_marginalize"?
   RemoveNodeFromGraph(vertex_to_marginalize);
 
   // (5) Remove all edges in the subgraph induced by the elimination clique.

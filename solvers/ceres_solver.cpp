@@ -350,7 +350,7 @@ void CeresSolver::AddNode(karto::Vertex<karto::LocalizedRangeScan> * pVertex)
 
   // Add mapping to nodes_inverted_
   (*nodes_inverted_)[node_iterator->second.data()] = unique_id;
-  std::cout << "AddNode(" << pose2d[0] << ") block: " << *(node_iterator->second.data()) << "; UniqueId: " << unique_id << std::endl;
+  std::cout << "AddNode(" << unique_id << ") block: " << *(node_iterator->second.data()) << "; pose: " << pose2d << std::endl;
 
   if (nodes_->size() == 1) {
     first_node_ = nodes_->find(unique_id);

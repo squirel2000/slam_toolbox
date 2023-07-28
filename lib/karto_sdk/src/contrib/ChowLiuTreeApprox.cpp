@@ -107,19 +107,19 @@ Eigen::SparseMatrix<double> ComputeMarginalInformationMatrix(
   std::cout << "ComputeSparseInverse for information_submatrix_bb:\n " << ComputeSparseInverse(information_submatrix_bb) << std::endl;
   
   // Record the information_matrix in information_matrix.csv
-  std::ofstream file_aa("information_submatrix_aa.csv");
+  std::ofstream file_aa("logs/information_submatrix_aa.csv");
   if (file_aa.is_open()) {
     file_aa << information_submatrix_aa << '\n';
   }
-  std::ofstream file_ab("information_submatrix_ab.csv");
+  std::ofstream file_ab("logs/information_submatrix_ab.csv");
   if (file_ab.is_open()) {
     file_ab << information_submatrix_ab << '\n';
   }
-  std::ofstream file_bb("information_submatrix_bb.csv");
+  std::ofstream file_bb("logs/information_submatrix_bb.csv");
   if (file_bb.is_open()) {
     file_bb << information_submatrix_bb << '\n';
   }
-  std::ofstream file_mi("MarginalInformationMatrix.csv");
+  std::ofstream file_mi("logs/MarginalInformationMatrix.csv");
   if (file_mi.is_open()) {
     file_mi << MarginalInformationMatrix << '\n';
   }

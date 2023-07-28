@@ -3075,7 +3075,6 @@ kt_bool Mapper::ProcessAgainstNodesNearBy(LocalizedRangeScan * pScan, kt_bool ad
     Vertex<LocalizedRangeScan> * scan_vertex = NULL;
     if (m_pUseScanMatching->GetValue()) {
       // add the vertex (pScan) and edges to graph, and perform MatchScan() to estimate the best pose, and set the pose to pScan
-      std::cout << "\nAddVertex(), and AddEdges() performing ScanMatch() " << std::endl;
       scan_vertex = m_pGraph->AddVertex(pScan);
       m_pGraph->AddEdges(pScan, cov);
       std::cout << "AddEdges() -> pScan(   SensorPose): " << pScan->GetSensorPose() << std::endl;
@@ -3255,7 +3254,7 @@ kt_bool Mapper::MarginalizeNodeFromGraph(
       m_pScanOptimizer->GetInformationMatrix(&ordering);
 
   // Record the information_matrix in information_matrix.csv
-  std::ofstream file("information_matrix.csv");
+  std::ofstream file("logs/information_matrix.csv");
   if (file.is_open()) {
     file << information_matrix << '\n'; // Jacobian.transpose() * Jacobian = (111x84).transpose() * (111x84) = 84x84
   }

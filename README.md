@@ -1,9 +1,5 @@
 ## Slam Toolbox
 
-| DockerHub  | [![Build Status](https://img.shields.io/docker/cloud/build/stevemacenski/slam-toolbox.svg?label=build)](https://hub.docker.com/r/stevemacenski/slam-toolbox) | [![Build Status](https://img.shields.io/docker/pulls/stevemacenski/slam-toolbox.svg?maxAge=2592000)](https://hub.docker.com/r/stevemacenski/slam-toolbox) |
-|-----|----|----|
-| **Build Farm** | [![Build Status](http://build.ros2.org/job/Ddev__slam_toolbox__ubuntu_bionic_amd64/badge/icon)](http://build.ros2.org/job/Ddev__slam_toolbox__ubuntu_bionic_amd64/) | N/A |
-
 We've received feedback from users and have robots operating in the following environments with SLAM Toolbox:
 - Retail
 - Warehouses
@@ -230,6 +226,8 @@ The following settings and options are exposed to you. My default configuration 
 `scan_topic` - scan topic, *absolute* path, ei `/scan` not `scan`
 
 `scan_queue_size` - The number of scan messages to queue up before throwing away old ones. Should always be set to 1 in async mode
+
+`use_map_saver` - Instantiate the map saver service and self-subscribe to the map topic
 
 `map_file_name` - Name of the pose-graph file to load on startup if available
 

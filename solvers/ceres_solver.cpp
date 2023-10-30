@@ -19,6 +19,8 @@ CeresSolver::CeresSolver()
   problem_(NULL), was_constant_set_(false)
 /*****************************************************************************/
 {
+  // This zeroes out the memory allocated for nodes_ before use.
+  // std::memset(nodes_, 0, sizeof(std::unordered_map<int, Eigen::Vector3d>));
 }
 
 /*****************************************************************************/
@@ -237,13 +239,18 @@ Eigen::SparseMatrix<double> CeresSolver::GetInformationMatrix(
     std::unordered_map<int, Eigen::Index> * ordering) const
 /****************************************************************************/
 {
+  boost::mutex::scoped_lock lock(nodes_mutex_);
+
+  bool isPoseNan = false;
+  
   if (ordering) {
     Eigen::Index index = 0u;
     std::vector<double*> parameter_blocks;
     problem_->GetParameterBlocks(&parameter_blocks);
+
     std::cout << "(*nodes_inverted_)[block]: index. block | *block -> (*nodes_inverted_)[block] -> (*ordering) " << std::endl;
     for (auto * block : parameter_blocks) {
-      // 'nodes_inverted_' is presumably a map from blocks to nodes. 
+      // The 'nodes_inverted_' map is presumably a map that maps blocks to nodes.
       // The brackets [] are used for accessing elements in a map or an array. The parentheses () are used for dereferencing pointers and for function/method calls. 
       // In this case, ordering and nodes_inverted_ are pointers to maps, so (*ordering) and (*nodes_inverted_) are the maps themselves.
       (*ordering)[(*nodes_inverted_)[block]] = index++;
@@ -251,8 +258,25 @@ Eigen::SparseMatrix<double> CeresSolver::GetInformationMatrix(
 
       for (int i = 0; i < 3; ++i) {
         if (std::isnan(block[i])) {
-          std::cout << index << ". " << block << " | " << (*block) << " -> " << (*nodes_inverted_)[block] << " -> " << (*ordering)[(*nodes_inverted_)[block]] << "; " << std::endl;
+          isPoseNan = true;
+          std::cout << index << ". " << block << " | " << (*block) << " -> " << (*nodes_inverted_)[block] << " -> " 
+                    << (*ordering)[(*nodes_inverted_)[block]] << "; " << std::endl;
         }
+      }
+    }
+    // Debugging the unordered_map nodes_inverted_
+    if (isPoseNan) {
+      // RCLCPP_WARN(node_->get_logger(), "nodes_inverted_:");
+      // for (auto& kv : *nodes_inverted_) {
+      //   RCLCPP_INFO(node_->get_logger(), "%p -> %d", kv.first, kv.second);
+      // }
+      std::ofstream csv_file("logs/nodes_inverted_GetInformationMatrix.csv");
+      if (csv_file.is_open()) {
+        csv_file << "Block,BlockValueX,BlockValueY,BlockValueZ,UniqueID\n";
+        for (const auto& kv : *nodes_inverted_) {
+          csv_file << kv.first << "," << kv.first[0] << "," << kv.first[1] << "," << kv.first[2] << "," << kv.second << "\n";
+        }
+        csv_file.close();
       }
     }
     // GetInformationMatrix(): parameter_block size: 84; ordering size: 28; index: 84 (Since 3 blocks map to 1 ordering, 28*3 = 84)
@@ -260,12 +284,15 @@ Eigen::SparseMatrix<double> CeresSolver::GetInformationMatrix(
               << "; ordering size: " << ordering->size() << "; index: " << index << std::endl; 
 
   }
+
   // Compressed Row Storage (CRS) Matrix. This is a type of sparse matrix storage format that saves space when storing large matrices that contain many zero elements
   ceres::CRSMatrix jacobian_data;
   problem_->Evaluate(ceres::Problem::EvaluateOptions(),
                      nullptr, nullptr, nullptr, &jacobian_data);
 
-  std::cout << "problem_->Evaluate(): " << jacobian_data.num_rows << " x " << jacobian_data.num_cols << std::endl;
+  // Print the size of the parameter_blocks vector
+  std::cout << "parameter_blocks size: " << parameter_blocks.size() << std::endl;
+  std::cout << "problem_->Evaluate(), jacobian_data size: " << jacobian_data.num_rows << " x " << jacobian_data.num_cols << std::endl;
 
   // Create a jacobian with the size of jacobian_data to avoid the issue of "malloc() is invalid"
   // const Eigen::Index dimension = problem_->NumParameters();
@@ -338,19 +365,45 @@ void CeresSolver::AddNode(karto::Vertex<karto::LocalizedRangeScan> * pVertex)
   }
 
   karto::Pose2 pose = pVertex->GetObject()->GetCorrectedPose();
-  Eigen::Vector3d pose2d( pose.GetX(), pose.GetY(), pose.GetHeading() );
+  // Eigen::Vector3d pose2d( pose.GetX(), pose.GetY(), pose.GetHeading() );
+  Eigen::Vector3d pose2d = Eigen::Vector3d::Zero();  // Zero-initialization
+  pose2d << pose.GetX(), pose.GetY(), pose.GetHeading();  // Set values
 
-  const int unique_id = pVertex->GetObject()->GetUniqueId();
+  // Check for nan values in pose
+  if (std::isnan(pose2d[0]) || std::isnan(pose2d[1]) || std::isnan(pose2d[2])) {
+    RCLCPP_ERROR(node_->get_logger(),  "Error: nan value detected in pose. Skipping node addition.");
+    return;
+  }
 
   boost::mutex::scoped_lock lock(nodes_mutex_);
 
+  const int unique_id = pVertex->GetObject()->GetUniqueId();
+
   // Insert the pose into nodes_ and get an iterator pointing to the newly inserted element
-  auto node_insert_result = nodes_->insert(std::pair<int, Eigen::Vector3d>(unique_id, pose2d));
+  auto node_insert_result = nodes_->insert(std::pair<int, Eigen::Vector3d>(unique_id, pose2d)); // std::unordered_map<int, Eigen::Vector3d> * nodes_;
   auto node_iterator = node_insert_result.first;
 
-  // Add mapping to nodes_inverted_
+  // Add mapping to nodes_inverted_. Note that nodes_inverted_ = new std::unordered_map<double *, int>();
   (*nodes_inverted_)[node_iterator->second.data()] = unique_id;
-  std::cout << "AddNode(" << unique_id << ") block: " << *(node_iterator->second.data()) << "; pose: " << pose2d << std::endl;
+  
+  std::ofstream log_file("logs/AddNode_log.txt", std::ios_base::app);  // Open file in append mode
+  if (log_file.is_open()) {
+    log_file << "AddNode(" << unique_id << ") block: " << *(node_iterator->second.data())
+             << "; size of nodes_inverted_: " << nodes_inverted_->size() << "; pose: " << pose2d.transpose() << std::endl;
+    log_file.close();
+  } else {
+    std::cerr << "Unable to open log file.";
+  }
+
+
+  std::ofstream csv_file("logs/nodes_inverted_AddNode.csv");
+  if (csv_file.is_open()) {
+    csv_file << "Block,BlockValueX,BlockValueY,BlockValueZ,UniqueID,x,y,theta\n";
+    for (const auto& kv : *nodes_inverted_) {
+      csv_file << kv.first << "," << kv.first[0] << "," << kv.first[1] << "," << kv.first[2] << "," << kv.second << "; " << "\n";
+    }
+    csv_file.close();
+  }
 
   if (nodes_->size() == 1) {
     first_node_ = nodes_->find(unique_id);

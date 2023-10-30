@@ -2040,7 +2040,8 @@ public:
    * Default Constructor
    */
   Pose2()
-  : m_Heading(0.0)
+  : m_Position(0.0, 0.0),
+    m_Heading(0.0)
   {
   }
 
@@ -6539,6 +6540,10 @@ public:
       delete iterator->second;
       iterator->second = nullptr;
       m_Data.erase(iterator);
+      
+      // Clear pose data on original object
+      scan->SetCorrectedPose(karto::Pose2());
+      
     } else {
       std::cout <<
         "Failed to remove data. Pointer to LocalizedRangeScan could not be found in dataset. " <<

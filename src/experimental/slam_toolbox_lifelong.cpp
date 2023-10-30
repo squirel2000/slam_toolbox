@@ -328,8 +328,7 @@ void LifelongSlamToolbox::removeFromSlamGraph(
   // TODO: Print out the content of the information matrix
 
   smapper_->getMapper()->MarginalizeNodeFromGraph(vertex);
-  smapper_->getMapper()->GetMapperSensorManager()->RemoveScan(
-    vertex->GetObject());
+  smapper_->getMapper()->GetMapperSensorManager()->RemoveScan(vertex->GetObject());
   dataset_->RemoveData(vertex->GetObject());
   vertex->RemoveObject();
   delete vertex;

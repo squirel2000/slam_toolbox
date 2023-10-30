@@ -73,10 +73,10 @@ private:
 
   // graph
   std::unordered_map<int, Eigen::Vector3d> * nodes_;
-  std::unordered_map<double *, int> * nodes_inverted_;
+  std::unordered_map<double*, int>* nodes_inverted_;  // Why not std::unordered_map<int, double *> 
   std::unordered_map<size_t, ceres::ResidualBlockId> * blocks_;
   std::unordered_map<int, Eigen::Vector3d>::iterator first_node_;
-  boost::mutex nodes_mutex_;
+  mutable boost::mutex nodes_mutex_;
 
   // ros
   rclcpp::Node::SharedPtr node_;

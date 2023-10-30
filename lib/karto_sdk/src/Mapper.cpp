@@ -370,6 +370,8 @@ void MapperSensorManager::RemoveScan(LocalizedRangeScan * pScan)
 
   LocalizedRangeScanMap::iterator it = m_Scans.find(pScan->GetUniqueId());
   if (it != m_Scans.end()) {
+    // // This function sets the pointer to NULL but doesn't explicitly delete it. If this object was dynamically allocated, then it would result in a memory leak.
+    // delete it->second;
     it->second = NULL;
     m_Scans.erase(it);
   } else {
@@ -3261,7 +3263,7 @@ kt_bool Mapper::MarginalizeNodeFromGraph(
 
   // (2) Marginalize the block w.r.t. vertex_to_marginalize from information matrix.
   constexpr Eigen::Index block_size = 3;
-  // The lambda function of 'block_index_of' is used to find the index of a specific vertex in the information matrix.
+  // The lambda function of 'block_index_of' is used to find the index of a specific vertex in the information matrix based on the vertex's UniqueId
   auto block_index_of = [&](Vertex<LocalizedRangeScan> * vertex) {
     return ordering[vertex->GetObject()->GetUniqueId()];
   };
@@ -3278,23 +3280,24 @@ kt_bool Mapper::MarginalizeNodeFromGraph(
       vertex_to_marginalize->GetAdjacentVertices();
   std::vector<Eigen::Index> elimination_clique_indices;  // need all indices
   elimination_clique_indices.reserve(elimination_clique.size() * block_size); // 2 * 3 (only reserve, but size = 0)
-  std::cout << "eliminate clique size: " << elimination_clique.size()  << "; block_size: " << block_size << "; elimination clique indices: " << elimination_clique_indices.size() << std::endl; // 2, 3, 0
+  std::cout << "eliminate clique size: " << elimination_clique.size()  << "; block_size: " << block_size << "; elimination clique indices size: " << elimination_clique_indices.size() << std::endl; // 2, 3, 0
   for (Vertex<LocalizedRangeScan> * vertex : elimination_clique) {
-    Eigen::Index block_index = block_index_of(vertex);
+    Eigen::Index block_index = block_index_of(vertex);  // e.g. 45, 51
     std::cout << "vertex UniqueId: " << vertex->GetObject()->GetUniqueId() << "; block_index: " << block_index << "; marginalize_block_index: " << marginalized_block_index << std::endl;
     if (block_index > marginalized_block_index) { // 45, 51 > marginalized_block_index = 48
-      block_index -= block_size;
+      block_index -= block_size;  // TODO: Why the block_size minus block_size while > marginalized_block_index? The index may not be continous?
     }
     for (Eigen::Index offset = 0; offset < block_size; ++offset) {
       elimination_clique_indices.push_back(block_index + offset);   // 45, 46, 47;  48, 49, 50
     }
   }
   const Eigen::SparseMatrix<double> local_marginal_covariance_matrix =
-      contrib::ComputeSparseInverse(  // Extract a 6x6 submatrix from the marinal_information_matrix (45~50 x 45~50), and compute its inverse
-          contrib::ArrangeView(marginal_information_matrix, // 81 x 81
-            elimination_clique_indices,  // 45, 46, 47,  48, 49, 50
-                               elimination_clique_indices).eval());
-  std::cout << "local_marginal_covariance_matrix around vertex " << vertex_to_marginalize->GetObject()->GetUniqueId() << " :\n" << local_marginal_covariance_matrix << std::endl;
+    contrib::ComputeSparseInverse(  // Extract a 6x6 submatrix from the marinal_information_matrix (45~50 x 45~50), and compute its inverse
+      contrib::ArrangeView(marginal_information_matrix, // 81 x 81
+        elimination_clique_indices,  // 45, 46, 47,  48, 49, 50
+        elimination_clique_indices).eval());
+  std::cout << "local_marginal_covariance_matrix" << local_marginal_covariance_matrix.rows() << " x " << local_marginal_covariance_matrix.cols() << "around vertex " 
+            << vertex_to_marginalize->GetObject()->GetUniqueId() << " :\n" << local_marginal_covariance_matrix << std::endl;
 
   // (4) Remove node for marginalized variable.
   RemoveNodeFromGraph(vertex_to_marginalize);
@@ -3347,7 +3350,12 @@ kt_bool Mapper::RemoveEdgeFromGraph(Edge<LocalizedRangeScan> * edge_to_remove)
 
 kt_bool Mapper::RemoveNodeFromGraph(Vertex<LocalizedRangeScan> * vertex_to_remove)
 {
-  // 1) delete edges in adjacent vertices, graph, and optimizer
+  // TODO: Check the problem_->GetParameterBlocks(&parameter_blocks); is consistent
+
+  // 0) set corrected pose to zero
+  vertex_to_remove->GetObject()->SetCorrectedPose(Pose2());
+
+  // 1) delete edges in adjacent vertices, optimizer, and graph
   std::vector<Vertex<LocalizedRangeScan> *> adjVerts =
     vertex_to_remove->GetAdjacentVertices();
   for (int i = 0; i != adjVerts.size(); i++) {
@@ -3357,10 +3365,15 @@ kt_bool Mapper::RemoveNodeFromGraph(Vertex<LocalizedRangeScan> * vertex_to_remov
       if (adjEdges[j]->GetTarget() == vertex_to_remove ||
         adjEdges[j]->GetSource() == vertex_to_remove)
       {
+        // Remove the edge from the adjacent vertex
         adjVerts[i]->RemoveEdge(j);
+
+        // Remove the edge from the optimizer
         m_pScanOptimizer->RemoveConstraint(
           adjEdges[j]->GetSource()->GetObject()->GetUniqueId(),
           adjEdges[j]->GetTarget()->GetObject()->GetUniqueId());
+        
+        // Remove the edge from the graph
         std::vector<Edge<LocalizedRangeScan> *> edges = m_pGraph->GetEdges();
         std::vector<Edge<LocalizedRangeScan> *>::iterator edgeGraphIt =
           std::find(edges.begin(), edges.end(), adjEdges[j]);
@@ -3387,11 +3400,11 @@ kt_bool Mapper::RemoveNodeFromGraph(Vertex<LocalizedRangeScan> * vertex_to_remov
   m_pScanOptimizer->RemoveNode(vertex_to_remove->GetObject()->GetUniqueId());
 
   // 3) delete from vertex map
-  std::map<Name, std::map<int, Vertex<LocalizedRangeScan> *>>
-  vertexMap = m_pGraph->GetVertices();
-  std::map<int, Vertex<LocalizedRangeScan> *> graphVertices =
+  std::map<Name, std::map<int, Vertex<LocalizedRangeScan>*>>
+    vertexMap = m_pGraph->GetVertices();
+  std::map<int, Vertex<LocalizedRangeScan>*> graphVertices =
     vertexMap[vertex_to_remove->GetObject()->GetSensorName()];
-  std::map<int, Vertex<LocalizedRangeScan> *>::iterator
+  std::map<int, Vertex<LocalizedRangeScan>*>::iterator
     vertexGraphIt = graphVertices.find(vertex_to_remove->GetObject()->GetStateId());
   if (vertexGraphIt != graphVertices.end()) {
     m_pGraph->RemoveVertex(vertex_to_remove->GetObject()->GetSensorName(),

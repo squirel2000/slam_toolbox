@@ -3399,7 +3399,7 @@ kt_bool Mapper::RemoveNodeFromGraph(Vertex<LocalizedRangeScan> * vertex_to_remov
   // 2) delete vertex from optimizer
   m_pScanOptimizer->RemoveNode(vertex_to_remove->GetObject()->GetUniqueId());
 
-  // 3) delete from vertex map
+  // 3) delete vertex from graph
   std::map<Name, std::map<int, Vertex<LocalizedRangeScan>*>>
     vertexMap = m_pGraph->GetVertices();
   std::map<int, Vertex<LocalizedRangeScan>*> graphVertices =

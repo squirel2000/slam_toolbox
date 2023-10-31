@@ -248,13 +248,19 @@ Eigen::SparseMatrix<double> CeresSolver::GetInformationMatrix(
     std::vector<double*> parameter_blocks;
     problem_->GetParameterBlocks(&parameter_blocks);
 
-    std::cout << "(*nodes_inverted_)[block]: index. block | *block -> (*nodes_inverted_)[block] -> (*ordering) " << std::endl;
+    std::cout << "(*nodes_inverted_)[block]: index. block | *block -> (*nodes_inverted_)[block] -> (*ordering)[(*nodes_inverted_)[block]] " << std::endl;
     for (auto * block : parameter_blocks) {
+
       // The 'nodes_inverted_' map is presumably a map that maps blocks to nodes.
       // The brackets [] are used for accessing elements in a map or an array. The parentheses () are used for dereferencing pointers and for function/method calls. 
       // In this case, ordering and nodes_inverted_ are pointers to maps, so (*ordering) and (*nodes_inverted_) are the maps themselves.
-      (*ordering)[(*nodes_inverted_)[block]] = index++;
-      // std::cout << index << ". " << block << " | "<< (*block) << " -> " << (*nodes_inverted_)[block] << " -> " << (*ordering)[(*nodes_inverted_)[block]] << "; " << std::endl;
+      // (*ordering)[(*nodes_inverted_)[block]] = index++;
+      auto it = nodes_inverted_->find(block);
+      if (it != nodes_inverted_->end()) {
+        // Found a match, use the unique_id for ordering
+        (*ordering)[it->second] = index++;
+      }
+      std::cout << index << ". " << block << " | "<< (*block) << " -> " << (*nodes_inverted_)[block] << " -> " << (*ordering)[(*nodes_inverted_)[block]] << "; " << std::endl;
 
       for (int i = 0; i < 3; ++i) {
         if (std::isnan(block[i])) {
@@ -264,21 +270,17 @@ Eigen::SparseMatrix<double> CeresSolver::GetInformationMatrix(
         }
       }
     }
-    // Debugging the unordered_map nodes_inverted_
-    if (isPoseNan) {
-      // RCLCPP_WARN(node_->get_logger(), "nodes_inverted_:");
-      // for (auto& kv : *nodes_inverted_) {
-      //   RCLCPP_INFO(node_->get_logger(), "%p -> %d", kv.first, kv.second);
-      // }
-      std::ofstream csv_file("logs/nodes_inverted_GetInformationMatrix.csv");
-      if (csv_file.is_open()) {
-        csv_file << "Block,BlockValueX,BlockValueY,BlockValueZ,UniqueID\n";
-        for (const auto& kv : *nodes_inverted_) {
-          csv_file << kv.first << "," << kv.first[0] << "," << kv.first[1] << "," << kv.first[2] << "," << kv.second << "\n";
-        }
-        csv_file.close();
-      }
-    }
+    // // Debugging the unordered_map nodes_inverted_
+    // if (isPoseNan) {
+    //   std::ofstream csv_file("logs/nodes_inverted_GetInformationMatrix.csv");
+    //   if (csv_file.is_open()) {
+    //     csv_file << "Block,BlockValueX,BlockValueY,BlockValueZ,UniqueID\n";
+    //     for (const auto& kv : *nodes_inverted_) {
+    //       csv_file << kv.first << "," << kv.first[0] << "," << kv.first[1] << "," << kv.first[2] << "," << kv.second << "\n";
+    //     }
+    //     csv_file.close();
+    //   }
+    // }
     // GetInformationMatrix(): parameter_block size: 84; ordering size: 28; index: 84 (Since 3 blocks map to 1 ordering, 28*3 = 84)
     std::cout << "GetInformationMatrix(): parameter_block size: " << parameter_blocks.size() 
               << "; ordering size: " << ordering->size() << "; index: " << index << std::endl; 
@@ -291,7 +293,6 @@ Eigen::SparseMatrix<double> CeresSolver::GetInformationMatrix(
                      nullptr, nullptr, nullptr, &jacobian_data);
 
   // Print the size of the parameter_blocks vector
-  std::cout << "parameter_blocks size: " << parameter_blocks.size() << std::endl;
   std::cout << "problem_->Evaluate(), jacobian_data size: " << jacobian_data.num_rows << " x " << jacobian_data.num_cols << std::endl;
 
   // Create a jacobian with the size of jacobian_data to avoid the issue of "malloc() is invalid"
@@ -369,12 +370,6 @@ void CeresSolver::AddNode(karto::Vertex<karto::LocalizedRangeScan> * pVertex)
   Eigen::Vector3d pose2d = Eigen::Vector3d::Zero();  // Zero-initialization
   pose2d << pose.GetX(), pose.GetY(), pose.GetHeading();  // Set values
 
-  // Check for nan values in pose
-  if (std::isnan(pose2d[0]) || std::isnan(pose2d[1]) || std::isnan(pose2d[2])) {
-    RCLCPP_ERROR(node_->get_logger(),  "Error: nan value detected in pose. Skipping node addition.");
-    return;
-  }
-
   boost::mutex::scoped_lock lock(nodes_mutex_);
 
   const int unique_id = pVertex->GetObject()->GetUniqueId();
@@ -383,12 +378,20 @@ void CeresSolver::AddNode(karto::Vertex<karto::LocalizedRangeScan> * pVertex)
   auto node_insert_result = nodes_->insert(std::pair<int, Eigen::Vector3d>(unique_id, pose2d)); // std::unordered_map<int, Eigen::Vector3d> * nodes_;
   auto node_iterator = node_insert_result.first;
 
+  // Print the unique_id and pose2d before insertion
+  std::cout << "Before Insertion: unique_id: " << unique_id << " pose2d: " << pose2d.transpose() << std::endl;
+  std::cout << "node_insert_result: " << node_insert_result.first->first << "; " << node_insert_result.first->second << "; second: " << node_insert_result.second << std::endl;
+  std::cout << "Node Iterator (key): " << node_iterator->first << "; (value): " << node_iterator->second.transpose() << "; (data pointer): " << node_iterator->second.data() << std::endl;
+
   // Add mapping to nodes_inverted_. Note that nodes_inverted_ = new std::unordered_map<double *, int>();
+  std::cout << "Size of nodes_inverted_ before: " << nodes_inverted_->size() << std::endl;
   (*nodes_inverted_)[node_iterator->second.data()] = unique_id;
-  
+  std::cout << "Size of nodes_inverted_ after: " << nodes_inverted_->size() << std::endl;
+
+
   std::ofstream log_file("logs/AddNode_log.txt", std::ios_base::app);  // Open file in append mode
   if (log_file.is_open()) {
-    log_file << "AddNode(" << unique_id << ") block: " << *(node_iterator->second.data())
+    log_file << "unique_id: " << unique_id << "; block: " << *(node_iterator->second.data())
              << "; size of nodes_inverted_: " << nodes_inverted_->size() << "; pose: " << pose2d.transpose() << std::endl;
     log_file.close();
   } else {
@@ -470,9 +473,22 @@ void CeresSolver::RemoveNode(kt_int32s id)
 /*****************************************************************************/
 {
   boost::mutex::scoped_lock lock(nodes_mutex_);
+  // TODO: Why remove nodes_ instead of nodes_inverted_? What's the difference between the two?
   GraphIterator nodeit = nodes_->find(id);
   if (nodeit != nodes_->end()) {
+    // Remove from nodes_
+    auto pose = nodeit->second;
     nodes_->erase(nodeit);
+
+    // TODO: Remove this 
+    // Remove from nodes_inverted_
+    for (auto it = nodes_inverted_->begin(); it != nodes_inverted_->end(); ++it) {
+      if (it->second == id) {
+        nodes_inverted_->erase(it);
+        break;
+      }
+    }
+
   } else {
     RCLCPP_ERROR(node_->get_logger(), "RemoveNode: Failed to find node matching id %i",
       (int)id);

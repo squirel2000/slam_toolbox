@@ -19,8 +19,7 @@ CeresSolver::CeresSolver()
   problem_(NULL), was_constant_set_(false)
 /*****************************************************************************/
 {
-  // This zeroes out the memory allocated for nodes_ before use.
-  // std::memset(nodes_, 0, sizeof(std::unordered_map<int, Eigen::Vector3d>));
+
 }
 
 /*****************************************************************************/
@@ -250,26 +249,30 @@ Eigen::SparseMatrix<double> CeresSolver::GetInformationMatrix(
 
     std::cout << "(*nodes_inverted_)[block]: index. block | *block -> (*nodes_inverted_)[block] -> (*ordering)[(*nodes_inverted_)[block]] " << std::endl;
     for (auto * block : parameter_blocks) {
-
       // The 'nodes_inverted_' map is presumably a map that maps blocks to nodes.
       // The brackets [] are used for accessing elements in a map or an array. The parentheses () are used for dereferencing pointers and for function/method calls. 
       // In this case, ordering and nodes_inverted_ are pointers to maps, so (*ordering) and (*nodes_inverted_) are the maps themselves.
       // (*ordering)[(*nodes_inverted_)[block]] = index++;
       auto it = nodes_inverted_->find(block);
       if (it != nodes_inverted_->end()) {
+        std::cout << std::endl;
         // Found a match, use the unique_id for ordering
         (*ordering)[it->second] = index++;
+        std::cout << index << " -> " << (*ordering)[it->second] << ": " << block << ": " << (*block) << "; ";
+        // std::cout << index << " -> " << (*ordering)[it->second] << ". " << block << " | " << (*block) << " -> " << (*nodes_inverted_)[block]  << "; " << std::endl;
       }
-      std::cout << index << ". " << block << " | "<< (*block) << " -> " << (*nodes_inverted_)[block] << " -> " << (*ordering)[(*nodes_inverted_)[block]] << "; " << std::endl;
+      std::cout << block << ": " << (*block) << "; ";
+    }
+    std::cout << std::endl;
 
-      for (int i = 0; i < 3; ++i) {
-        if (std::isnan(block[i])) {
-          isPoseNan = true;
-          std::cout << index << ". " << block << " | " << (*block) << " -> " << (*nodes_inverted_)[block] << " -> " 
-                    << (*ordering)[(*nodes_inverted_)[block]] << "; " << std::endl;
-        }
+    bool hasNan = false;
+    for (auto* block : parameter_blocks) {
+      if (std::isnan(*block) || std::isinf(*block)) {
+        hasNan = true;
+        std::cout << "NaN detected at block: " << block << "; (*block): " << (*block) << std::endl;
       }
     }
+
     // // Debugging the unordered_map nodes_inverted_
     // if (isPoseNan) {
     //   std::ofstream csv_file("logs/nodes_inverted_GetInformationMatrix.csv");
@@ -283,7 +286,8 @@ Eigen::SparseMatrix<double> CeresSolver::GetInformationMatrix(
     // }
     // GetInformationMatrix(): parameter_block size: 84; ordering size: 28; index: 84 (Since 3 blocks map to 1 ordering, 28*3 = 84)
     std::cout << "GetInformationMatrix(): parameter_block size: " << parameter_blocks.size() 
-              << "; ordering size: " << ordering->size() << "; index: " << index << std::endl; 
+              << "; ordering size: " << ordering->size() << "; index: " << index 
+              << "; nodes_inverted_ size: " << nodes_inverted_->size() << std::endl;
 
   }
 
@@ -466,6 +470,12 @@ void CeresSolver::AddConstraint(karto::Edge<karto::LocalizedRangeScan> * pEdge)
 
   blocks_->insert(std::pair<std::size_t, ceres::ResidualBlockId>(
       GetHash(node1, node2), block));
+
+  // Print the content of the added residual block 
+  std::cout << "  node1: " << node1 << ": " << node1it->second(0) << ", " << node1it->second(1) << ", " << node1it->second(2) 
+            << "; node2: " << node2 << ": " << node2it->second(0) << ", " << node2it->second(1) << ", " << node2it->second(2) << std::endl;
+  // Print the number of ParameterBlocks and ResidualBlocks
+  std::cout << "AddConstraint(): ParameterBlocks: " << problem_->NumParameterBlocks() << "; ResidualBlocks: " << problem_->NumResidualBlocks() << std::endl;
 }
 
 /*****************************************************************************/
@@ -473,7 +483,7 @@ void CeresSolver::RemoveNode(kt_int32s id)
 /*****************************************************************************/
 {
   boost::mutex::scoped_lock lock(nodes_mutex_);
-  // TODO: Why remove nodes_ instead of nodes_inverted_? What's the difference between the two?
+  // TODO: Why remove nodes_ instead of nodes_inverted_? What's the difference between these two?
   GraphIterator nodeit = nodes_->find(id);
   if (nodeit != nodes_->end()) {
     // Remove from nodes_
@@ -487,7 +497,7 @@ void CeresSolver::RemoveNode(kt_int32s id)
         nodes_inverted_->erase(it);
         break;
       }
-    }
+    }    
 
   } else {
     RCLCPP_ERROR(node_->get_logger(), "RemoveNode: Failed to find node matching id %i",
@@ -500,6 +510,9 @@ void CeresSolver::RemoveConstraint(kt_int32s sourceId, kt_int32s targetId)
 /*****************************************************************************/
 {
   boost::mutex::scoped_lock lock(nodes_mutex_);
+  // DEBUG: Print the number of ParameterBlocks and ResidualBlocks
+  std::cout << "Before RemoveConstraint(): ParameterBlocks: " << problem_->NumParameterBlocks() << "; ResidualBlocks: " << problem_->NumResidualBlocks() << std::endl;
+
   std::unordered_map<std::size_t, ceres::ResidualBlockId>::iterator it_a =
     blocks_->find(GetHash(sourceId, targetId));
   std::unordered_map<std::size_t, ceres::ResidualBlockId>::iterator it_b =
@@ -515,6 +528,10 @@ void CeresSolver::RemoveConstraint(kt_int32s sourceId, kt_int32s targetId)
       "RemoveConstraint: Failed to find residual block for %i %i",
       (int)sourceId, (int)targetId);
   }
+
+  // DEBUG: Print the number of ParameterBlocks and ResidualBlocks
+  std::cout << "After RemoveConstraint(): ParameterBlocks: " << problem_->NumParameterBlocks() << "; ResidualBlocks: " << problem_->NumResidualBlocks() << std::endl;
+
 }
 
 /*****************************************************************************/

@@ -3276,7 +3276,7 @@ kt_bool Mapper::MarginalizeNodeFromGraph(
   // (3) Compute marginal covariance *local* to the elimination clique (adjacent vertices)
   // i.e. by only inverting the relevant marginal information submatrix.
   // This is an approximation for the sake of performance.
-  std::vector<Vertex<LocalizedRangeScan> *> elimination_clique =  // UiqueId: 14, 16
+  std::vector<Vertex<LocalizedRangeScan> *> elimination_clique =  // UniqueId: 14, 16
       vertex_to_marginalize->GetAdjacentVertices();
   std::vector<Eigen::Index> elimination_clique_indices;  // need all indices
   elimination_clique_indices.reserve(elimination_clique.size() * block_size); // 2 * 3 (only reserve, but size = 0)
@@ -3285,7 +3285,7 @@ kt_bool Mapper::MarginalizeNodeFromGraph(
     Eigen::Index block_index = block_index_of(vertex);  // e.g. 45, 51
     std::cout << "vertex UniqueId: " << vertex->GetObject()->GetUniqueId() << "; block_index: " << block_index << "; marginalize_block_index: " << marginalized_block_index << std::endl;
     if (block_index > marginalized_block_index) { // 45, 51 > marginalized_block_index = 48
-      block_index -= block_size;  // TODO: Why the block_size minus block_size while > marginalized_block_index? The index may not be continous?
+      block_index -= block_size;  // Since the blocks (48,49,50) of vertex_to_marginalize (15) are removed from the information matrix, all blocks > 48 should minus the block_size = 3 to fit the marginal_information_matrix.
     }
     for (Eigen::Index offset = 0; offset < block_size; ++offset) {
       elimination_clique_indices.push_back(block_index + offset);   // 45, 46, 47;  48, 49, 50
@@ -3296,10 +3296,10 @@ kt_bool Mapper::MarginalizeNodeFromGraph(
       contrib::ArrangeView(marginal_information_matrix, // 81 x 81
         elimination_clique_indices,  // 45, 46, 47,  48, 49, 50
         elimination_clique_indices).eval());
-  std::cout << "local_marginal_covariance_matrix" << local_marginal_covariance_matrix.rows() << " x " << local_marginal_covariance_matrix.cols() << "around vertex " 
+  std::cout << "local_marginal_covariance_matrix " << local_marginal_covariance_matrix.rows() << " x " << local_marginal_covariance_matrix.cols() << " around vertex " 
             << vertex_to_marginalize->GetObject()->GetUniqueId() << " :\n" << local_marginal_covariance_matrix << std::endl;
 
-  // (4) Remove node for marginalized variable.
+  // (4) Remove the marginalized node from the graph and the optimizer.
   RemoveNodeFromGraph(vertex_to_marginalize);
 
   // (5) Remove all edges in the subgraph induced by the elimination clique.
@@ -3350,7 +3350,7 @@ kt_bool Mapper::RemoveEdgeFromGraph(Edge<LocalizedRangeScan> * edge_to_remove)
 
 kt_bool Mapper::RemoveNodeFromGraph(Vertex<LocalizedRangeScan> * vertex_to_remove)
 {
-  // TODO: Check the problem_->GetParameterBlocks(&parameter_blocks); is consistent
+  // TODO: Check if the problem_->GetParameterBlocks(&parameter_blocks); is consistent
 
   // 0) set corrected pose to zero
   vertex_to_remove->GetObject()->SetCorrectedPose(Pose2());
@@ -3363,12 +3363,12 @@ kt_bool Mapper::RemoveNodeFromGraph(Vertex<LocalizedRangeScan> * vertex_to_remov
     bool found = false;
     for (int j = 0; j != adjEdges.size(); j++) {
       if (adjEdges[j]->GetTarget() == vertex_to_remove ||
-        adjEdges[j]->GetSource() == vertex_to_remove)
+          adjEdges[j]->GetSource() == vertex_to_remove)
       {
         // Remove the edge from the adjacent vertex
         adjVerts[i]->RemoveEdge(j);
 
-        // Remove the edge from the optimizer
+        // Remove the edge/constraint from the optimizer based on the two terminal nodes of the edge
         m_pScanOptimizer->RemoveConstraint(
           adjEdges[j]->GetSource()->GetObject()->GetUniqueId(),
           adjEdges[j]->GetTarget()->GetObject()->GetUniqueId());

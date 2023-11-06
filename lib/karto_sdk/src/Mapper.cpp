@@ -3291,6 +3291,7 @@ kt_bool Mapper::MarginalizeNodeFromGraph(
       elimination_clique_indices.push_back(block_index + offset);   // 45, 46, 47;  48, 49, 50
     }
   }
+  
   const Eigen::SparseMatrix<double> local_marginal_covariance_matrix =
     contrib::ComputeSparseInverse(  // Extract a 6x6 submatrix from the marinal_information_matrix (45~50 x 45~50), and compute its inverse
       contrib::ArrangeView(marginal_information_matrix, // 81 x 81

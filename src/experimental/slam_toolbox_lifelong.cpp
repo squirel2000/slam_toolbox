@@ -323,6 +323,7 @@ void LifelongSlamToolbox::removeFromSlamGraph(
 {
 
   // TODO: Print out the vertex including the node, pose, edges
+  RCLCPP_WARN(get_logger(), "LifelongSlamToolbox::removeFromSlamGraph()");
   std::cout << "removeFromSlamGraph() @ vertex: " << vertex->GetObject() << "; pose: " << vertex->GetObject()->GetCorrectedPose()
             << "; UniqueId: " << vertex->GetObject()->GetUniqueId() << "; stateId: " << vertex->GetObject()->GetStateId() << std::endl;
   // TODO: Print out the content of the information matrix

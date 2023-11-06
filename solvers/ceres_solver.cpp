@@ -255,15 +255,16 @@ Eigen::SparseMatrix<double> CeresSolver::GetInformationMatrix(
       // (*ordering)[(*nodes_inverted_)[block]] = index++;
       auto it = nodes_inverted_->find(block);
       if (it != nodes_inverted_->end()) {
-        std::cout << std::endl;
         // Found a match, use the unique_id for ordering
-        (*ordering)[it->second] = index++;
-        std::cout << index << " -> " << (*ordering)[it->second] << ": " << block << ": " << (*block) << "; ";
+        (*ordering)[it->second] = index;  // it->second is the unique_id of a node
+        // std::cout << std::endl;
+        // std::cout << index << " -> " << (*ordering)[it->second] << ": " << block << ": " << (*block) << "; ";
         // std::cout << index << " -> " << (*ordering)[it->second] << ". " << block << " | " << (*block) << " -> " << (*nodes_inverted_)[block]  << "; " << std::endl;
       }
-      std::cout << block << ": " << (*block) << "; ";
+      index++;
+      // std::cout << block << ": " << (*block) << "; ";
     }
-    std::cout << std::endl;
+    // std::cout << std::endl;
 
     bool hasNan = false;
     for (auto* block : parameter_blocks) {
@@ -378,6 +379,7 @@ void CeresSolver::AddNode(karto::Vertex<karto::LocalizedRangeScan> * pVertex)
 
   const int unique_id = pVertex->GetObject()->GetUniqueId();
 
+  std::cout << "AddNode() Size of nodes_inverted_: " << nodes_inverted_->size() << "; node_: " << nodes_->size() << std::endl;
   // Insert the pose into nodes_ and get an iterator pointing to the newly inserted element
   auto node_insert_result = nodes_->insert(std::pair<int, Eigen::Vector3d>(unique_id, pose2d)); // std::unordered_map<int, Eigen::Vector3d> * nodes_;
   auto node_iterator = node_insert_result.first;
@@ -388,9 +390,8 @@ void CeresSolver::AddNode(karto::Vertex<karto::LocalizedRangeScan> * pVertex)
   std::cout << "Node Iterator (key): " << node_iterator->first << "; (value): " << node_iterator->second.transpose() << "; (data pointer): " << node_iterator->second.data() << std::endl;
 
   // Add mapping to nodes_inverted_. Note that nodes_inverted_ = new std::unordered_map<double *, int>();
-  std::cout << "Size of nodes_inverted_ before: " << nodes_inverted_->size() << std::endl;
   (*nodes_inverted_)[node_iterator->second.data()] = unique_id;
-  std::cout << "Size of nodes_inverted_ after: " << nodes_inverted_->size() << std::endl;
+  std::cout << "[After] Size of nodes_inverted_: " << nodes_inverted_->size() << "; node_: " << nodes_->size() << std::endl;
 
 
   std::ofstream log_file("logs/AddNode_log.txt", std::ios_base::app);  // Open file in append mode
@@ -471,11 +472,31 @@ void CeresSolver::AddConstraint(karto::Edge<karto::LocalizedRangeScan> * pEdge)
   blocks_->insert(std::pair<std::size_t, ceres::ResidualBlockId>(
       GetHash(node1, node2), block));
 
+
+  // For debugging
+  // Evaluate the cost function, ResidualBlock, gradient, and jacobian at the given parameter values, and return the evaluated cost, and gradient if not NULL.
+  double cost = 0.0;
+  std::vector<double> residuals;
+  std::vector<double> gradient;
+  ceres::CRSMatrix jacobian_data;
+  problem_->Evaluate(ceres::Problem::EvaluateOptions(), &cost, &residuals, &gradient, &jacobian_data);
+
   // Print the content of the added residual block 
   std::cout << "  node1: " << node1 << ": " << node1it->second(0) << ", " << node1it->second(1) << ", " << node1it->second(2) 
-            << "; node2: " << node2 << ": " << node2it->second(0) << ", " << node2it->second(1) << ", " << node2it->second(2) << std::endl;
+            << "; node2: " << node2 << ": " << node2it->second(0) << ", " << node2it->second(1) << ", " << node2it->second(2) 
+            << "; pose2d: " << pose2d.transpose() << std::endl;
+  // Print the covariance, precisionMatrix = information, and sqrt_information matrices
+  std::cout << "  covariance: " << pLinkInfo->GetCovariance() << std::endl;
+  std::cout << "  information: " << information << std::endl;
+  std::cout << "  sqrt_information: " << sqrt_information << std::endl;
+  // Print the cost, residuals, gradient, and jacobian
+  std::cout << "  cost: " << cost << std::endl;
+  // std::cout << "  residuals: " << residuals[0] << ", " << residuals[1] << ", " << residuals[2] << ", " << residuals[3] << ", " << residuals[4] << ", " << residuals[5] << std::endl;
+  std::cout << "  residuals(" << residuals.size() << "): " << residuals[0] << ", " << residuals[1] << ", " << residuals[2] << ", " << residuals[3] << ", " << residuals[4] << ", " << residuals[5] << std::endl;
+  std::cout << "  gradient(" << gradient.size() << "): " << gradient[0] << ", " << gradient[1] << ", " << gradient[2] << ", " << gradient[3] << ", " << gradient[4] << ", " << gradient[5] << std::endl;
+  std::cout << "  jacobian_data: " << jacobian_data.num_rows << " x " << jacobian_data.num_cols << std::endl;
   // Print the number of ParameterBlocks and ResidualBlocks
-  std::cout << "AddConstraint(): ParameterBlocks: " << problem_->NumParameterBlocks() << "; ResidualBlocks: " << problem_->NumResidualBlocks() << std::endl;
+  std::cout << "AddConstraint(): ParameterBlocks: " << problem_->NumParameterBlocks() << "; ResidualBlocks: " << problem_->NumResidualBlocks() << "; blocks: " << blocks_->size() << std::endl;
 }
 
 /*****************************************************************************/

@@ -53,11 +53,11 @@ namespace karto
 
 // enable this for verbose debug information
 // #define KARTO_DEBUG
-#define MAPPER_DEBUG
+// #define MAPPER_DEBUG
 
-  #define MAX_VARIANCE            500.0
-  #define DISTANCE_PENALTY_GAIN   0.2
-  #define ANGLE_PENALTY_GAIN      0.2
+#define MAX_VARIANCE            500.0
+#define DISTANCE_PENALTY_GAIN   0.2
+#define ANGLE_PENALTY_GAIN      0.2
 
 ////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////
@@ -3252,8 +3252,9 @@ kt_bool Mapper::MarginalizeNodeFromGraph(
 
   // (1) Fetch information matrix from solver. The information matrix is the inverse of the covariance matrix (covariance = uncertainty)
   std::unordered_map<int, Eigen::Index> ordering;
+  kt_int32s vertex_to_marginalize_unique_id = vertex_to_marginalize->GetObject()->GetUniqueId();
   const Eigen::SparseMatrix<double> information_matrix =
-      m_pScanOptimizer->GetInformationMatrix(&ordering);
+    m_pScanOptimizer->GetInformationMatrix(&ordering, vertex_to_marginalize_unique_id);
 
   // Record the information_matrix in information_matrix.csv
   std::ofstream file("logs/information_matrix.csv");

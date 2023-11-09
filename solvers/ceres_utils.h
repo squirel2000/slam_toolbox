@@ -160,6 +160,7 @@ Eigen::Matrix<T, 2, 2> RotationMatrix2D(T yaw_radians)
 class PoseGraph2dErrorTerm
 {
 public:
+  // Refer to https://github.com/ceres-solver/ceres-solver/blob/master/examples/slam/pose_graph_2d/pose_graph_2d_error_term.h
   PoseGraph2dErrorTerm(
     double x_ab, double y_ab, double yaw_ab_radians,
     const Eigen::Matrix3d & sqrt_information)
@@ -189,6 +190,7 @@ public:
     double x_ab, double y_ab, double yaw_ab_radians,
     const Eigen::Matrix3d & sqrt_information)
   {
+    // Dimesion of residual = 3, and number of parameters in each block = 1
     return new ceres::AutoDiffCostFunction<PoseGraph2dErrorTerm, 3, 1, 1, 1, 1, 1, 1>(
       new PoseGraph2dErrorTerm(
         x_ab, y_ab, yaw_ab_radians,

@@ -1104,7 +1104,7 @@ public:
    * Get information matrix associated with the graph
    */
   virtual Eigen::SparseMatrix<double> GetInformationMatrix(
-      std::unordered_map<int, Eigen::Index> * /* ordering */) const = 0;
+    std::unordered_map<int, Eigen::Index>* /* ordering */, kt_int32s& vertex_to_marginalize_unique_id) const = 0;
 
   /**
    * Modify a node's pose

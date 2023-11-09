@@ -48,11 +48,13 @@ public:
   virtual std::unordered_map<int, Eigen::Vector3d> * getGraph();
   // Get information matrix associated with the graph
   virtual Eigen::SparseMatrix<double> GetInformationMatrix(
-      std::unordered_map<int, Eigen::Index> * ordering) const;
+    std::unordered_map<int, Eigen::Index>* ordering, kt_int32s& vertex_to_marginalize_unique_id) const;
   // Removes a node from the solver correction table
   virtual void RemoveNode(kt_int32s id);
   // Removes constraints from the optimization problem
   virtual void RemoveConstraint(kt_int32s sourceId, kt_int32s targetId);
+
+  virtual void PrintCostAndJacobian(const std::string& postfix);
 
   // change a node's pose
   virtual void ModifyNode(const int & unique_id, Eigen::Vector3d pose);

@@ -833,6 +833,7 @@ void SlamToolbox::loadSerializedPoseGraph(
   }
 
   solver_->Compute();
+  RCLCPP_WARN(get_logger(), "Finish loadSerializedPoseGraph()");
 }
 
 /*****************************************************************************/

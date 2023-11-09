@@ -103,25 +103,34 @@ Eigen::SparseMatrix<double> ComputeMarginalInformationMatrix(
   }
 
   // (2) Compute Schur's complement over the variables that are kept.
+  // discarded_variable_index
+  std::cout << "ComputeMarginalInformationMatrix(), Discarded variable index: " << discarded_variable_index << "; matrix dimension: " << dimension << std::endl;
   Eigen::SparseMatrix<double> MarginalInformationMatrix = (information_submatrix_aa - information_submatrix_ab * ComputeSparseInverse(information_submatrix_bb) * information_submatrix_ba);
   std::cout << "ComputeSparseInverse for information_submatrix_bb:\n " << ComputeSparseInverse(information_submatrix_bb) << std::endl;
   
   // Record the information_matrix in information_matrix.csv
-  std::ofstream file_aa("logs/information_submatrix_aa.csv");
+  std::ofstream file_aa("logs/information_submatrix_aa_" + std::to_string(discarded_variable_index) + ".csv");
   if (file_aa.is_open()) {
     file_aa << information_submatrix_aa << '\n';
   }
-  std::ofstream file_ab("logs/information_submatrix_ab.csv");
+  std::ofstream file_ab("logs/information_submatrix_ab_" + std::to_string(discarded_variable_index) + ".csv");
   if (file_ab.is_open()) {
     file_ab << information_submatrix_ab << '\n';
   }
-  std::ofstream file_bb("logs/information_submatrix_bb.csv");
+  std::ofstream file_bb("logs/information_submatrix_bb_" + std::to_string(discarded_variable_index) + ".csv");
   if (file_bb.is_open()) {
     file_bb << information_submatrix_bb << '\n';
   }
-  std::ofstream file_mi("logs/MarginalInformationMatrix.csv");
+  std::ofstream file_mi("logs/MarginalInformationMatrix_" + std::to_string(discarded_variable_index) + ".csv");
   if (file_mi.is_open()) {
     file_mi << MarginalInformationMatrix << '\n';
+  }
+
+  // DEBUG ONLY
+  if (information_submatrix_bb.nonZeros() == 0) {
+    // Terminate execution, or throw an error, or handle the situation as needed
+    std::cerr << "The information_submatrix_bb is a zero matrix. Terminating execution." << std::endl;
+    std::exit(EXIT_FAILURE); // or throw an exception, or return an error code, depending on your application
   }
 
   // return (information_submatrix_aa - information_submatrix_ba *

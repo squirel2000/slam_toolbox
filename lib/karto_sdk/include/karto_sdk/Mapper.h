@@ -1076,6 +1076,13 @@ public:
   }
 
   /**
+   * Clear the problem and re-populate the residual blocks based on the edges in graph
+   */
+  virtual void RepopulateProblem(const std::vector<Edge<LocalizedRangeScan>*>& /*edges*/)
+  {
+  }
+
+  /**
    * Resets the solver
    */
   virtual void Clear()

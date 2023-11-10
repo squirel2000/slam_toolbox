@@ -241,8 +241,6 @@ Eigen::SparseMatrix<double> CeresSolver::GetInformationMatrix(
 /****************************************************************************/
 {
   boost::mutex::scoped_lock lock(nodes_mutex_);
-
-  bool isPoseNan = false;
   
   if (ordering) {
     Eigen::Index index = 0u;
@@ -263,8 +261,6 @@ Eigen::SparseMatrix<double> CeresSolver::GetInformationMatrix(
       }
       index++;
     }
-    // std::cout << std::endl;
-
     // GetInformationMatrix(): parameter_block size: 84; ordering size: 28; index: 84 (Since 3 blocks map to 1 ordering, 28*3 = 84)
     std::cout << "GetInformationMatrix(): Size of parameter_block: " << parameter_blocks.size() 
       << "; ordering: " << ordering->size() << "; nodes_inverted_: " << nodes_inverted_->size() << "; index: " << index << std::endl;
@@ -356,14 +352,11 @@ void CeresSolver::AddNode(karto::Vertex<karto::LocalizedRangeScan> * pVertex)
     return;
   }
 
-  karto::Pose2 pose = pVertex->GetObject()->GetCorrectedPose();
-  // Eigen::Vector3d pose2d( pose.GetX(), pose.GetY(), pose.GetHeading() );
-  Eigen::Vector3d pose2d = Eigen::Vector3d::Zero();  // Zero-initialization
-  pose2d << pose.GetX(), pose.GetY(), pose.GetHeading();  // Set values
-
   boost::mutex::scoped_lock lock(nodes_mutex_);
 
   const int unique_id = pVertex->GetObject()->GetUniqueId();
+  karto::Pose2 pose = pVertex->GetObject()->GetCorrectedPose();
+  Eigen::Vector3d pose2d( pose.GetX(), pose.GetY(), pose.GetHeading() );
 
   // Insert the pose into nodes_ and get an iterator pointing to the newly inserted element
   auto node_insert_result = nodes_->insert(std::pair<int, Eigen::Vector3d>(unique_id, pose2d)); // std::unordered_map<int, Eigen::Vector3d> * nodes_;
@@ -376,8 +369,6 @@ void CeresSolver::AddNode(karto::Vertex<karto::LocalizedRangeScan> * pVertex)
 
   // Add mapping to nodes_inverted_. Note that nodes_inverted_ = new std::unordered_map<double *, int>();
   (*nodes_inverted_)[node_iterator->second.data()] = unique_id;
-  // std::cout << "[After] Size of nodes_inverted_: " << nodes_inverted_->size() << "; node_: " << nodes_->size() << std::endl;
-
 
   // std::ofstream log_file("logs/AddNode_log.txt", std::ios_base::app);  // Open file in append mode
   // if (log_file.is_open()) {
@@ -407,6 +398,9 @@ void CeresSolver::AddNode(karto::Vertex<karto::LocalizedRangeScan> * pVertex)
 void CeresSolver::AddConstraint(karto::Edge<karto::LocalizedRangeScan> * pEdge)
 /*****************************************************************************/
 {
+  // RCLCPP_WARN(node_->get_logger(), "AddConstraint: %d -> %d",
+  //   pEdge->GetSource()->GetObject()->GetUniqueId(), pEdge->GetTarget()->GetObject()->GetUniqueId());
+
   // get IDs in graph for this edge
   boost::mutex::scoped_lock lock(nodes_mutex_);
 
@@ -457,13 +451,13 @@ void CeresSolver::AddConstraint(karto::Edge<karto::LocalizedRangeScan> * pEdge)
   blocks_->insert(std::pair<std::size_t, ceres::ResidualBlockId>(
       GetHash(node1, node2), block));
 
-  // Print the content of the added residual block 
-  std::cout << "AddConstraint(): node1: " << node1 << ": " << node1it->second.transpose() << "; node2: " << node2 << ": " << node2it->second.transpose()
-    << "; pose2d: " << pose2d.transpose() << std::endl;
-  // Print the covariance, precisionMatrix = information, and sqrt_information matrices
-  std::cout << "  covariance: " << pLinkInfo->GetCovariance() << std::endl;
-  std::cout << "  information: " << information << std::endl;
-  std::cout << "  sqrt_information: " << sqrt_information << std::endl;
+  // // Print the content of the added residual block 
+  // std::cout << "AddConstraint(): node1: " << node1 << ": " << node1it->second.transpose() << "; node2: " << node2 << ": " << node2it->second.transpose()
+  //   << "; pose2d: " << pose2d.transpose() << std::endl;
+  // // Print the covariance, precisionMatrix = information, and sqrt_information matrices
+  // std::cout << "  covariance: " << pLinkInfo->GetCovariance() << std::endl;
+  // std::cout << "  information: " << information << std::endl;
+  // std::cout << "  sqrt_information: " << sqrt_information << std::endl;
 
   // 
   // DEBUG: Evaluate the cost function, ResidualBlock, gradient, and jacobian at the given parameter values, and return the evaluated cost, and gradient if not NULL.
@@ -495,7 +489,6 @@ void CeresSolver::RemoveNode(kt_int32s id)
     auto pose = nodeit->second;
     nodes_->erase(nodeit);
 
-    // TODO: Remove this 
     // Remove from nodes_inverted_
     for (auto it = nodes_inverted_->begin(); it != nodes_inverted_->end(); ++it) {
       if (it->second == id) {
@@ -531,10 +524,10 @@ void CeresSolver::RemoveConstraint(kt_int32s sourceId, kt_int32s targetId)
       "RemoveConstraint: Failed to find residual block for %i %i",
       (int)sourceId, (int)targetId);
   }
-
+  
   std::cout << "RemoveConstraint(" << sourceId << ", " << targetId << ")" << std::endl;
-  std::string postfix = "removeconstraint_" + std::to_string(sourceId) + "_" + std::to_string(targetId);
-  PrintCostAndJacobian(postfix);
+  // std::string postfix = "removeconstraint_" + std::to_string(sourceId) + "_" + std::to_string(targetId);
+  // PrintCostAndJacobian(postfix);
 }
 
 void CeresSolver::PrintCostAndJacobian(const std::string& postfix) {
@@ -577,6 +570,49 @@ void CeresSolver::PrintCostAndJacobian(const std::string& postfix) {
   }
   file_residuals.close();
   file_gradient.close();
+}
+
+/*****************************************************************************/
+void CeresSolver::RepopulateProblem(const std::vector<karto::Edge<karto::LocalizedRangeScan>*> & edges)
+/*****************************************************************************/
+{
+  {
+    boost::mutex::scoped_lock lock(nodes_mutex_);
+
+    // Clear the residual blocks and parameter blocks in problem_ and clear the blocks_
+    RCLCPP_WARN(node_->get_logger(),
+      "RepopulateProblem() with ResidualBlocks: %d, ParameterBlocks: %d and blocks: %ld, and edges: %ld ",
+      problem_->NumResidualBlocks(), problem_->NumParameterBlocks(), blocks_->size(), edges.size());
+
+    blocks_->clear();
+    std::vector<double*> parameter_blocks;
+    problem_->GetParameterBlocks(&parameter_blocks);
+    for (auto* block : parameter_blocks) {
+      problem_->RemoveParameterBlock(block);
+    }
+
+    for (auto& block_pair : *blocks_) {
+      problem_->RemoveResidualBlock(block_pair.second);
+    }
+    
+    RCLCPP_INFO(node_->get_logger(),
+      "Clear the problem_ with ResidualBlocks: %d, ParameterBlocks: %d and blocks: %ld ",
+      problem_->NumResidualBlocks(), problem_->NumParameterBlocks(), blocks_->size());
+  }
+  
+  // Repopulate the problem with the current graph
+  RCLCPP_INFO(node_->get_logger(),
+    "Before the AddConstraint with ");
+  for (karto::Edge<karto::LocalizedRangeScan>* edge : edges) {
+    AddConstraint(edge);
+  }
+  RCLCPP_INFO(node_->get_logger(),
+    "Repopulate problem_ with ResidualBlocks: %d, ParameterBlocks: %d and blocks: %ld ",
+    problem_->NumResidualBlocks(), problem_->NumParameterBlocks(), blocks_->size());
+  RCLCPP_INFO(node_->get_logger(),
+    "Repopulate problem_ with nodes_: %ld, nodes_inverted_: %ld, and edges: %ld ",
+    nodes_->size(), nodes_inverted_->size(), edges.size());
+
 }
 
 /*****************************************************************************/

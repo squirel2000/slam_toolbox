@@ -121,32 +121,19 @@ void LifelongSlamToolbox::evaluateNodeDepreciation(
   if (range_scan) {
     boost::mutex::scoped_lock lock(smapper_mutex_);
 
-    const BoundingBox2 & bb = range_scan->GetBoundingBox(); // bb: the max. scanning range of this range_scan 
+    // Find the near vertices (candicates) within a radius of the current range_scan
+    const BoundingBox2 & bb = range_scan->GetBoundingBox();
     const Size2<double> bb_size = bb.GetSize();
-    double radius = sqrt(bb_size.GetWidth() * bb_size.GetWidth() + bb_size.GetHeight() * bb_size.GetHeight()) / 2.0;  // hypotenuse of the bounding box / 2
-    Vertices near_scan_vertices = FindScansWithinRadius(range_scan, radius); // Limit the radius to 1.0 (m) instead of the radius of the bounding box
-    // -> bb_size: (20.5305, 16.353); radius: 13.1237; 9 vertices around 2.97644 0.992615 6.33001e-06
+    double radius = sqrt(bb_size.GetWidth() * bb_size.GetWidth() + bb_size.GetHeight() * bb_size.GetHeight()) / 2.0;
+    Vertices near_scan_vertices = FindScansWithinRadius(range_scan, radius);
     
-    // Vertices near_scan_vertices = FindScansWithinRadius(range_scan, radius);
-    // -> bb_size is variable,  bb_size: (26.0209, 7.06083); radius: 13.4809; near_scan_vertices: 168
-    std::cout << "bb_size: " << bb_size << "; radius: " << radius << "; " << near_scan_vertices.size() << " vertices around " << range_scan->GetCorrectedPose() << std::endl;
-
+    // Compute the score for each candidate
     ScoredVertices scored_vertices = computeScores(near_scan_vertices, range_scan);
 
+    // Remove the vertex if its score is lower than the removal_score_
     ScoredVertices::iterator it;
     for (it = scored_vertices.begin(); it != scored_vertices.end(); ++it) {
-      if (it->GetScore() < removal_score_) {  // removal_score_ = 0.04
-        float dx = it->GetVertex()->GetObject()->GetCorrectedPose().GetX() - range_scan->GetCorrectedPose().GetX();
-        float dy = it->GetVertex()->GetObject()->GetCorrectedPose().GetY() - range_scan->GetCorrectedPose().GetY();
-        float dist = sqrt( dx * dx + dy * dy );
-        RCLCPP_WARN(
-            get_logger(),
-            "Removing node %i from graph with score: %f and old score: %f @(%.3f, %.3f, %.3f) dist: %.3f",
-            it->GetVertex()->GetObject()->GetUniqueId(), it->GetScore(),
-            it->GetVertex()->GetScore(),
-            it->GetVertex()->GetObject()->GetCorrectedPose().GetX(),
-            it->GetVertex()->GetObject()->GetCorrectedPose().GetY(),
-            it->GetVertex()->GetObject()->GetCorrectedPose().GetHeading(), dist);
+      if (it->GetScore() < removal_score_) {
         removeFromSlamGraph(it->GetVertex());
       } else {
         updateScoresSlamGraph(it->GetScore(), it->GetVertex());
@@ -322,11 +309,8 @@ void LifelongSlamToolbox::removeFromSlamGraph(
 /*****************************************************************************/
 {
 
-  // TODO: Print out the vertex including the node, pose, edges
-  RCLCPP_WARN(get_logger(), "LifelongSlamToolbox::removeFromSlamGraph()");
-  std::cout << "removeFromSlamGraph() @ vertex: " << vertex->GetObject() << "; pose: " << vertex->GetObject()->GetCorrectedPose()
-            << "; UniqueId: " << vertex->GetObject()->GetUniqueId() << "; stateId: " << vertex->GetObject()->GetStateId() << std::endl;
-  // TODO: Print out the content of the information matrix
+  std::cout << "Remove vertex " << vertex->GetObject()->GetUniqueId() << ": " 
+            << vertex->GetObject()->GetCorrectedPose() << " from SLAM graph" << std::endl;
 
   smapper_->getMapper()->MarginalizeNodeFromGraph(vertex);
   smapper_->getMapper()->GetMapperSensorManager()->RemoveScan(vertex->GetObject());

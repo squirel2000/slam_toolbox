@@ -1076,6 +1076,13 @@ public:
   }
 
   /**
+   * Clear the problem and re-populate the residual blocks based on the edges in graph
+   */
+  virtual void RepopulateProblem(const std::vector<Edge<LocalizedRangeScan>*>& /*edges*/)
+  {
+  }
+
+  /**
    * Resets the solver
    */
   virtual void Clear()
@@ -1101,10 +1108,10 @@ public:
   }
 
   /**
-   * Get information matrix associated with the graph
+   * Get the information matrix, that is inverse of the covariance matrix, associated with the graph
    */
   virtual Eigen::SparseMatrix<double> GetInformationMatrix(
-    std::unordered_map<int, Eigen::Index>* /* ordering */, kt_int32s& vertex_to_marginalize_unique_id) const = 0;
+    std::unordered_map<int, Eigen::Index>* /* ordering */, kt_int32s& unique_id_of_marginalized_vertex) const = 0;
 
   /**
    * Modify a node's pose

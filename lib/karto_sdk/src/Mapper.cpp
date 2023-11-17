@@ -3250,56 +3250,44 @@ kt_bool Mapper::MarginalizeNodeFromGraph(
   //   Journal of Robotics Research, vol. 31, no. 11, Sept. 2012,
   //   pp. 1219–1230, doi:10.1177/0278364912455072.
 
-  // (1) Fetch information matrix from solver. The information matrix is the inverse of the covariance matrix (covariance = uncertainty)
+  // (1) Fetch information matrix, that is inverse of the covariance (uncertainty) matrix, from solver
   std::unordered_map<int, Eigen::Index> ordering;
-  kt_int32s vertex_to_marginalize_unique_id = vertex_to_marginalize->GetObject()->GetUniqueId();
+  kt_int32s unique_id_of_marginalized_vertex = vertex_to_marginalize->GetObject()->GetUniqueId();
   const Eigen::SparseMatrix<double> information_matrix =
-    m_pScanOptimizer->GetInformationMatrix(&ordering, vertex_to_marginalize_unique_id);
+    m_pScanOptimizer->GetInformationMatrix(&ordering, unique_id_of_marginalized_vertex);
 
-  // Record the information_matrix in information_matrix.csv
-  std::ofstream file("logs/information_matrix.csv");
-  if (file.is_open()) {
-    file << information_matrix << '\n'; // Jacobian.transpose() * Jacobian = (111x84).transpose() * (111x84) = 84x84
-  }
-
-  // (2) Marginalize the block w.r.t. vertex_to_marginalize from information matrix.
+  // (2) Marginalize 3x3 blocks (x,y,theta) w.r.t. vertex_to_marginalize from information matrix.
   constexpr Eigen::Index block_size = 3;
-  // The lambda function of 'block_index_of' is used to find the index of a specific vertex in the information matrix based on the vertex's UniqueId
   auto block_index_of = [&](Vertex<LocalizedRangeScan> * vertex) {
+    // The lambda function points the vertex's UniqueId to the index of the parameter blocks index, 
+    // that is the row/column of the information matrix
     return ordering[vertex->GetObject()->GetUniqueId()];
   };
-  const Eigen::Index marginalized_block_index = block_index_of(vertex_to_marginalize);  // e.g. vertex(UniqueId = 15) -> marginalized_block_index = 48
+  const Eigen::Index marginalized_block_index = block_index_of(vertex_to_marginalize);
   const Eigen::SparseMatrix<double> marginal_information_matrix =
-      contrib::ComputeMarginalInformationMatrix(
-          information_matrix, marginalized_block_index, block_size);  // 48, 3
-  std::cout << "(2) -> marginalized_block_index " << marginalized_block_index << "; " << vertex_to_marginalize->GetObject()->GetUniqueId() << std::endl;  // 48, 15
+      contrib::ComputeMarginalInformationMatrix(information_matrix, marginalized_block_index, block_size);
 
   // (3) Compute marginal covariance *local* to the elimination clique (adjacent vertices)
   // i.e. by only inverting the relevant marginal information submatrix.
   // This is an approximation for the sake of performance.
-  std::vector<Vertex<LocalizedRangeScan> *> elimination_clique =  // UniqueId: 14, 16
-      vertex_to_marginalize->GetAdjacentVertices();
+  std::vector<Vertex<LocalizedRangeScan> *> elimination_clique = vertex_to_marginalize->GetAdjacentVertices();
   std::vector<Eigen::Index> elimination_clique_indices;  // need all indices
-  elimination_clique_indices.reserve(elimination_clique.size() * block_size); // 2 * 3 (only reserve, but size = 0)
-  std::cout << "eliminate clique size: " << elimination_clique.size()  << "; block_size: " << block_size << "; elimination clique indices size: " << elimination_clique_indices.size() << std::endl; // 2, 3, 0
+  elimination_clique_indices.reserve(elimination_clique.size() * block_size); // 2 * 3
   for (Vertex<LocalizedRangeScan> * vertex : elimination_clique) {
-    Eigen::Index block_index = block_index_of(vertex);  // e.g. 45, 51
-    std::cout << "vertex UniqueId: " << vertex->GetObject()->GetUniqueId() << "; block_index: " << block_index << "; marginalize_block_index: " << marginalized_block_index << std::endl;
-    if (block_index > marginalized_block_index) { // 45, 51 > marginalized_block_index = 48
-      block_index -= block_size;  // Since the blocks (48,49,50) of vertex_to_marginalize (15) are removed from the information matrix, all blocks > 48 should minus the block_size = 3 to fit the marginal_information_matrix.
+    Eigen::Index block_index = block_index_of(vertex);
+    if (block_index > marginalized_block_index) {
+      // Remove 3 blocks of the vertex_to_marginalize from the information matrix,
+      // so shift blocks > marginalized_block_index to fit the marginal_information_matrix.
+      block_index -= block_size;
     }
     for (Eigen::Index offset = 0; offset < block_size; ++offset) {
       elimination_clique_indices.push_back(block_index + offset);   // 45, 46, 47;  48, 49, 50
     }
   }
-  
+  // Extract a 6x6 submatrix from the marinal_information_matrix (45~50 x 45~50), and compute its inverse
   const Eigen::SparseMatrix<double> local_marginal_covariance_matrix =
-    contrib::ComputeSparseInverse(  // Extract a 6x6 submatrix from the marinal_information_matrix (45~50 x 45~50), and compute its inverse
-      contrib::ArrangeView(marginal_information_matrix, // 81 x 81
-        elimination_clique_indices,  // 45, 46, 47,  48, 49, 50
-        elimination_clique_indices).eval());
-  std::cout << "local_marginal_covariance_matrix " << local_marginal_covariance_matrix.rows() << " x " << local_marginal_covariance_matrix.cols() << " around vertex " 
-            << vertex_to_marginalize->GetObject()->GetUniqueId() << " :\n" << local_marginal_covariance_matrix << std::endl;
+    contrib::ComputeSparseInverse(contrib::ArrangeView(marginal_information_matrix,
+        elimination_clique_indices, elimination_clique_indices).eval());
 
   // (4) Remove the marginalized node from the graph and the optimizer.
   RemoveNodeFromGraph(vertex_to_marginalize);
@@ -3307,13 +3295,8 @@ kt_bool Mapper::MarginalizeNodeFromGraph(
   // (5) Remove all edges in the subgraph induced by the elimination clique.
   for (Vertex<LocalizedRangeScan> * vertex : elimination_clique) {  // vertex: 14, 16
     for (Edge<LocalizedRangeScan> * edge : vertex->GetEdges()) {
-      Vertex<LocalizedRangeScan> * other_vertex =
-          edge->GetSource() == vertex ?
-          edge->GetTarget() : edge->GetSource();
-      const auto it = std::find(
-          elimination_clique.begin(),
-          elimination_clique.end(),
-          other_vertex);
+      Vertex<LocalizedRangeScan>* other_vertex = edge->GetSource() == vertex ? edge->GetTarget() : edge->GetSource();
+      const auto it = std::find(elimination_clique.begin(), elimination_clique.end(), other_vertex);
       if (it != elimination_clique.end()) {
         RemoveEdgeFromGraph(edge);
       }
@@ -3327,11 +3310,27 @@ kt_bool Mapper::MarginalizeNodeFromGraph(
 
   // (7) Push tree edges to graph and solver (as constraints).
   for (Edge<LocalizedRangeScan> * edge : chow_liu_tree_approximation) {
-    // In any case, it's good to know that removing the assert() resolved the issue. The assert() function is primarily used for debugging purposes during development and is often removed or disabled in production code. 
     m_pGraph->AddEdge(edge);  // assert(m_pGraph->AddEdge(edge));
     m_pScanOptimizer->AddConstraint(edge);
-    std::cout << "Add edge from node " << edge->GetSource()->GetObject()->GetUniqueId() << " to node " << edge->GetTarget()->GetObject()->GetUniqueId() << std::endl;
   }
+
+  // (8) Clear the problem and repopulate all residual blocks
+  std::vector<karto::Edge<karto::LocalizedRangeScan>*> edges = m_pGraph->GetEdges();
+  m_pScanOptimizer->RepopulateProblem(edges);
+
+
+#ifdef MAPPER_DEBUG
+  std::cout << "Marginalized vertex Id: " << vertex_to_marginalize->GetObject()->GetUniqueId() << "; parameter block index: " << marginalized_block_index << std::endl;
+  // TODO: Size of the jacobian or ResidualBlocks/ParameterBlocks array
+  std::cout << "information_matrix" << information_matrix.rows() << " x " << information_matrix.cols() << std::endl;
+  std::cout << "eliminate clique size: " << elimination_clique.size() << " with local marginal covariance matrix:" << ": \n"
+    << local_marginal_covariance_matrix << std::endl;
+  std::cout << "Chow-Liu tree approximation adding edges: " << std::endl;
+  for (Edge<LocalizedRangeScan>* edge : chow_liu_tree_approximation) {
+    std::cout << " node: " << edge->GetSource()->GetObject()->GetUniqueId() << " -> node: " << edge->GetTarget()->GetObject()->GetUniqueId();
+  }
+  std::cout << std::endl;
+#endif
 
   return true;
 }
@@ -3342,6 +3341,7 @@ kt_bool Mapper::RemoveEdgeFromGraph(Edge<LocalizedRangeScan> * edge_to_remove)
   Vertex<LocalizedRangeScan> * target = edge_to_remove->GetTarget();
   source->RemoveEdge(edge_to_remove);
   target->RemoveEdge(edge_to_remove);
+  // TODO: Comment out this line
   m_pScanOptimizer->RemoveConstraint(
       source->GetObject()->GetUniqueId(),
       target->GetObject()->GetUniqueId());
@@ -3352,11 +3352,6 @@ kt_bool Mapper::RemoveEdgeFromGraph(Edge<LocalizedRangeScan> * edge_to_remove)
 
 kt_bool Mapper::RemoveNodeFromGraph(Vertex<LocalizedRangeScan> * vertex_to_remove)
 {
-  // TODO: Check if the problem_->GetParameterBlocks(&parameter_blocks); is consistent
-
-  // 0) set corrected pose to zero
-  vertex_to_remove->GetObject()->SetCorrectedPose(Pose2());
-
   // 1) delete edges in adjacent vertices, optimizer, and graph
   std::vector<Vertex<LocalizedRangeScan> *> adjVerts =
     vertex_to_remove->GetAdjacentVertices();
@@ -3370,6 +3365,7 @@ kt_bool Mapper::RemoveNodeFromGraph(Vertex<LocalizedRangeScan> * vertex_to_remov
         // Remove the edge from the adjacent vertex
         adjVerts[i]->RemoveEdge(j);
 
+        // TODO: Comment out this code
         // Remove the edge/constraint from the optimizer based on the two terminal nodes of the edge
         m_pScanOptimizer->RemoveConstraint(
           adjEdges[j]->GetSource()->GetObject()->GetUniqueId(),

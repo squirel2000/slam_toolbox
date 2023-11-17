@@ -46,15 +46,30 @@ public:
   virtual void AddConstraint(karto::Edge<karto::LocalizedRangeScan> * pEdge);
   // Get graph stored
   virtual std::unordered_map<int, Eigen::Vector3d> * getGraph();
-  // Get information matrix associated with the graph
+
+  /**
+   * @brief Get the information matrix, that is inverse of the covariance matrix, associated with the graph
+   *        Or transpose of Jacobian x Jacobian (3M x 3N), where M is the number of residuals
+   * 
+   * @param ordering map each set of parameter blocks (x, y, theta) to a node's unique id
+   * @param unique_id_of_marginalized_vertex 
+   * @return Eigen::SparseMatrix<double> 3N x 3N information matrix, where N is the number of nodes
+   */
   virtual Eigen::SparseMatrix<double> GetInformationMatrix(
-    std::unordered_map<int, Eigen::Index>* ordering, kt_int32s& vertex_to_marginalize_unique_id) const;
-  // Removes a node from the solver correction table
+    std::unordered_map<int, Eigen::Index>* ordering, kt_int32s& unique_id_of_marginalized_vertex) const;
+
+  /**
+   * @brief Removes a node from the solver correction table, nodes_ and nodes_inverted_
+   * 
+   * @param id Unique id of the node to remove
+   */
   virtual void RemoveNode(kt_int32s id);
+
   // Removes constraints from the optimization problem
   virtual void RemoveConstraint(kt_int32s sourceId, kt_int32s targetId);
 
-  virtual void PrintCostAndJacobian(const std::string& postfix);
+  // Repopulate the problem with the current graph
+  virtual void RepopulateProblem(const std::vector<karto::Edge<karto::LocalizedRangeScan>*>& edges);
 
   // change a node's pose
   virtual void ModifyNode(const int & unique_id, Eigen::Vector3d pose);
@@ -75,7 +90,8 @@ private:
 
   // graph
   std::unordered_map<int, Eigen::Vector3d> * nodes_;
-  std::unordered_map<double*, int>* nodes_inverted_;  // Why not std::unordered_map<int, double *> 
+  // Quickly look up the unique id of a node based on a given ParameterBlocks in solver
+  std::unordered_map<double*, int>* nodes_inverted_;
   std::unordered_map<size_t, ceres::ResidualBlockId> * blocks_;
   std::unordered_map<int, Eigen::Vector3d>::iterator first_node_;
   mutable boost::mutex nodes_mutex_;

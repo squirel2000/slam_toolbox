@@ -13,35 +13,34 @@ namespace contrib
 {
 
 Eigen::SparseMatrix<double> ComputeMarginalInformationMatrix(
-    const Eigen::SparseMatrix<double> & information_matrix,
+    const Eigen::SparseMatrix<double> & information_matrix, /* 3N x 3N */
     const Eigen::Index discarded_variable_index,
-    const Eigen::Index variables_dimension)
+    const Eigen::Index variables_dimension) /* 3 */
 {
   const Eigen::Index dimension = information_matrix.outerSize();
   assert(dimension == information_matrix.innerSize());  // must be square
-  const Eigen::Index marginal_dimension = dimension - variables_dimension;  // 255 = 258 - 3
-  const Eigen::Index last_variable_index = dimension - variables_dimension; // 255 = 258 -3
+  const Eigen::Index marginal_dimension = dimension - variables_dimension;  // 3N - 3
+  const Eigen::Index last_variable_index = dimension - variables_dimension; // 3N - 3
 
   // URL: https://vnav.mit.edu/material/24-SLAM2-FactorGraphsAndMarginalization-slides.pdf
   // (1) Break up information matrix based on which are the variables
   // kept (a) and which is the variable discarded (b).
-  Eigen::SparseMatrix<double>
-      information_submatrix_aa, information_submatrix_ab,
-      information_submatrix_ba, information_submatrix_bb;
-  if (discarded_variable_index == 0) {  // The first one (0)
-      information_submatrix_aa =                        // Extract rows 3 to 257 and columns 3 to 257 from information_matrix
+  Eigen::SparseMatrix<double> information_submatrix_aa, information_submatrix_ab,
+                              information_submatrix_ba, information_submatrix_bb;
+  if (discarded_variable_index == 0) {                // Should not happen due to base of the graph
+    information_submatrix_aa =                        // Extract 3~(3N-1) rows/columns from information_matrix
         information_matrix.bottomRightCorner(
-            marginal_dimension, marginal_dimension);    // 255, 255
+            marginal_dimension, marginal_dimension);
     information_submatrix_ab =
         information_matrix.bottomLeftCorner(
-            marginal_dimension, variables_dimension);   // 255, 3
+            marginal_dimension, variables_dimension); // 0~(3N-1) x 3~(3N-1)
     information_submatrix_ba =
         information_matrix.topRightCorner(
-            variables_dimension, marginal_dimension);   // 255, 81
+            variables_dimension, marginal_dimension); // 3~(3N-1) x 0~(3N-1)
     information_submatrix_bb =
         information_matrix.topLeftCorner(
-            variables_dimension, variables_dimension);  // 3, 3
-  } else if (discarded_variable_index == last_variable_index) { // 81
+            variables_dimension, variables_dimension);  // 0~2 x 0~2
+  } else if (discarded_variable_index == last_variable_index) {
     information_submatrix_aa =
         information_matrix.topLeftCorner(
             marginal_dimension, marginal_dimension);
@@ -102,40 +101,10 @@ Eigen::SparseMatrix<double> ComputeMarginalInformationMatrix(
             variables_dimension);
   }
 
-  // (2) Compute Schur's complement over the variables that are kept.
-  // discarded_variable_index
-  std::cout << "ComputeMarginalInformationMatrix(), Discarded variable index: " << discarded_variable_index << "; matrix dimension: " << dimension << std::endl;
-  Eigen::SparseMatrix<double> MarginalInformationMatrix = (information_submatrix_aa - information_submatrix_ab * ComputeSparseInverse(information_submatrix_bb) * information_submatrix_ba);
-  std::cout << "ComputeSparseInverse for information_submatrix_bb:\n " << ComputeSparseInverse(information_submatrix_bb) << std::endl;
+  // (2) Compute Schur's complement over the variables that are kept, that is MarginalInformationMatrix
+  Eigen::SparseMatrix<double> MarginalInformationMatrix = (information_submatrix_aa - 
+    information_submatrix_ab * ComputeSparseInverse(information_submatrix_bb) * information_submatrix_ba);
   
-  // Record the information_matrix in information_matrix.csv
-  std::ofstream file_aa("logs/information_submatrix_aa_" + std::to_string(discarded_variable_index) + ".csv");
-  if (file_aa.is_open()) {
-    file_aa << information_submatrix_aa << '\n';
-  }
-  std::ofstream file_ab("logs/information_submatrix_ab_" + std::to_string(discarded_variable_index) + ".csv");
-  if (file_ab.is_open()) {
-    file_ab << information_submatrix_ab << '\n';
-  }
-  std::ofstream file_bb("logs/information_submatrix_bb_" + std::to_string(discarded_variable_index) + ".csv");
-  if (file_bb.is_open()) {
-    file_bb << information_submatrix_bb << '\n';
-  }
-  std::ofstream file_mi("logs/MarginalInformationMatrix_" + std::to_string(discarded_variable_index) + ".csv");
-  if (file_mi.is_open()) {
-    file_mi << MarginalInformationMatrix << '\n';
-  }
-
-  // DEBUG ONLY
-  if (information_submatrix_bb.nonZeros() == 0) {
-    // Terminate execution, or throw an error, or handle the situation as needed
-    std::cerr << "The information_submatrix_bb is a zero matrix. Terminating execution." << std::endl;
-    std::exit(EXIT_FAILURE); // or throw an exception, or return an error code, depending on your application
-  }
-
-  // return (information_submatrix_aa - information_submatrix_ba *
-  //         ComputeSparseInverse(information_submatrix_bb) *
-  //         information_submatrix_ab);
   return MarginalInformationMatrix;
 }
 

@@ -3301,7 +3301,7 @@ kt_bool Mapper::MarginalizeNodeFromGraph(
   std::cout << "local_marginal_covariance_matrix " << local_marginal_covariance_matrix.rows() << " x " << local_marginal_covariance_matrix.cols() << " around vertex " 
             << vertex_to_marginalize->GetObject()->GetUniqueId() << " :\n" << local_marginal_covariance_matrix << std::endl;
 
-  // (4) Remove the marginalized node from the graph and the optimizer.
+  // (4) Remove the marginalized node from the graph and the optimizer. TODO: Check m_pScanOptimizer
   RemoveNodeFromGraph(vertex_to_marginalize);
 
   // (5) Remove all edges in the subgraph induced by the elimination clique.
@@ -3333,6 +3333,10 @@ kt_bool Mapper::MarginalizeNodeFromGraph(
     std::cout << "Add edge from node " << edge->GetSource()->GetObject()->GetUniqueId() << " to node " << edge->GetTarget()->GetObject()->GetUniqueId() << std::endl;
   }
 
+  // (8) Clear the problem and repopulate all residual blocks
+  std::vector<karto::Edge<karto::LocalizedRangeScan>*> edges = m_pGraph->GetEdges();
+  m_pScanOptimizer->RepopulateProblem(edges);
+
   return true;
 }
 
@@ -3342,6 +3346,7 @@ kt_bool Mapper::RemoveEdgeFromGraph(Edge<LocalizedRangeScan> * edge_to_remove)
   Vertex<LocalizedRangeScan> * target = edge_to_remove->GetTarget();
   source->RemoveEdge(edge_to_remove);
   target->RemoveEdge(edge_to_remove);
+  // TODO: Comment out this line
   m_pScanOptimizer->RemoveConstraint(
       source->GetObject()->GetUniqueId(),
       target->GetObject()->GetUniqueId());
@@ -3370,6 +3375,7 @@ kt_bool Mapper::RemoveNodeFromGraph(Vertex<LocalizedRangeScan> * vertex_to_remov
         // Remove the edge from the adjacent vertex
         adjVerts[i]->RemoveEdge(j);
 
+        // TODO: Comment out this code
         // Remove the edge/constraint from the optimizer based on the two terminal nodes of the edge
         m_pScanOptimizer->RemoveConstraint(
           adjEdges[j]->GetSource()->GetObject()->GetUniqueId(),

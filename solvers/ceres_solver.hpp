@@ -55,6 +55,8 @@ public:
   virtual void RemoveConstraint(kt_int32s sourceId, kt_int32s targetId);
 
   virtual void PrintCostAndJacobian(const std::string& postfix);
+  // Repopulate the problem with the current graph
+  virtual void RepopulateProblem(const std::vector<karto::Edge<karto::LocalizedRangeScan>*>& edges);
 
   // change a node's pose
   virtual void ModifyNode(const int & unique_id, Eigen::Vector3d pose);

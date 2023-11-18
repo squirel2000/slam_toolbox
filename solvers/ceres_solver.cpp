@@ -451,43 +451,32 @@ void CeresSolver::RemoveConstraint(kt_int32s sourceId, kt_int32s targetId)
 void CeresSolver::RepopulateProblem(const std::vector<karto::Edge<karto::LocalizedRangeScan>*> & edges)
 /*****************************************************************************/
 {
-  {
+  { // Avoid deadlock 
     boost::mutex::scoped_lock lock(nodes_mutex_);
 
-    // Clear the residual blocks and parameter blocks in problem_ and clear the blocks_
-    RCLCPP_WARN(node_->get_logger(),
-      "RepopulateProblem() with ResidualBlocks: %d, ParameterBlocks: %d and blocks: %ld, and edges: %ld ",
-      problem_->NumResidualBlocks(), problem_->NumParameterBlocks(), blocks_->size(), edges.size());
-
     blocks_->clear();
+
+    // Remove all parameter blocks from the problem
     std::vector<double*> parameter_blocks;
     problem_->GetParameterBlocks(&parameter_blocks);
     for (auto* block : parameter_blocks) {
       problem_->RemoveParameterBlock(block);
     }
 
+    // Remove all residual blocks from the problem
     for (auto& block_pair : *blocks_) {
       problem_->RemoveResidualBlock(block_pair.second);
     }
-    
-    RCLCPP_INFO(node_->get_logger(),
-      "Clear the problem_ with ResidualBlocks: %d, ParameterBlocks: %d and blocks: %ld ",
-      problem_->NumResidualBlocks(), problem_->NumParameterBlocks(), blocks_->size());
   }
-  
-  // Repopulate the problem with the current graph
-  RCLCPP_INFO(node_->get_logger(),
-    "Before the AddConstraint with ");
+
+  // Repopulate the problem with edges of the current graph
   for (karto::Edge<karto::LocalizedRangeScan>* edge : edges) {
     AddConstraint(edge);
   }
-  RCLCPP_INFO(node_->get_logger(),
-    "Repopulate problem_ with ResidualBlocks: %d, ParameterBlocks: %d and blocks: %ld ",
-    problem_->NumResidualBlocks(), problem_->NumParameterBlocks(), blocks_->size());
-  RCLCPP_INFO(node_->get_logger(),
-    "Repopulate problem_ with nodes_: %ld, nodes_inverted_: %ld, and edges: %ld ",
-    nodes_->size(), nodes_inverted_->size(), edges.size());
 
+  RCLCPP_INFO(node_->get_logger(),
+    "Problem with %d ResidualBlocks, %d ParameterBlocks, %ld nodes and edges: %ld ",
+    problem_->NumResidualBlocks(), problem_->NumParameterBlocks(), nodes_->size(), edges.size());
 }
 
 /*****************************************************************************/

@@ -286,7 +286,6 @@ void MapperSensorManager::RegisterSensor(const Name & rSensorName)
  */
 LocalizedRangeScan * MapperSensorManager::GetScan(const Name & rSensorName, kt_int32s scanIndex)
 {
-  // TODO: What's pScanManager? What's different from 
   ScanManager * pScanManager = GetScanManager(rSensorName);
   if (pScanManager != NULL) {
     LocalizedRangeScanMap::iterator it = pScanManager->GetScans().find(scanIndex);  // 23
@@ -1709,9 +1708,9 @@ Edge<LocalizedRangeScan> * MapperGraph::AddEdge(
     Edge<LocalizedRangeScan> * pEdge = *iter;
 
     if (pEdge->GetTarget() == v2->second) {
-      std::cout << "Current edge in v1 with " << v1->second->GetEdges().size() << " : from edge " << pEdge->GetSource()->GetObject()->GetUniqueId() << " to " << pEdge->GetTarget()->GetObject()->GetUniqueId() << std::endl;
-      std::cout << "Trying to add edge: from v1 " << v1->second->GetObject()->GetUniqueId() << " to v2 " << v2->second->GetObject()->GetUniqueId() << std::endl;
-      std::cout << "Edge already exists. Not adding new edge." << std::endl;
+      std::cout << "Trying to add edge: from v1 " << v1->second->GetObject()->GetUniqueId() 
+                << " to v2 " << v2->second->GetObject()->GetUniqueId() 
+                << ", which is already exists. Not adding new edge."<< std::endl;
       rIsNewEdge = false;
       return pEdge;
     }
@@ -3314,15 +3313,8 @@ kt_bool Mapper::MarginalizeNodeFromGraph(
     m_pScanOptimizer->AddConstraint(edge);
   }
 
-  // (8) Clear the problem and repopulate all residual blocks
-  std::vector<karto::Edge<karto::LocalizedRangeScan>*> edges = m_pGraph->GetEdges();
-  m_pScanOptimizer->RepopulateProblem(edges);
-
-
 #ifdef MAPPER_DEBUG
   std::cout << "Marginalized vertex Id: " << vertex_to_marginalize->GetObject()->GetUniqueId() << "; parameter block index: " << marginalized_block_index << std::endl;
-  // TODO: Size of the jacobian or ResidualBlocks/ParameterBlocks array
-  std::cout << "information_matrix" << information_matrix.rows() << " x " << information_matrix.cols() << std::endl;
   std::cout << "eliminate clique size: " << elimination_clique.size() << " with local marginal covariance matrix:" << ": \n"
     << local_marginal_covariance_matrix << std::endl;
   std::cout << "Chow-Liu tree approximation adding edges: " << std::endl;
@@ -3331,6 +3323,10 @@ kt_bool Mapper::MarginalizeNodeFromGraph(
   }
   std::cout << std::endl;
 #endif
+
+  // (8) Clear the problem and repopulate all residual blocks
+  std::vector<karto::Edge<karto::LocalizedRangeScan>*> edges = m_pGraph->GetEdges();
+  m_pScanOptimizer->RepopulateProblem(edges);
 
   return true;
 }

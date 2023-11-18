@@ -176,13 +176,13 @@ double LifelongSlamToolbox::computeObjectiveScore(
   // intersect_over_union: The higher this score, the better aligned in scope these scans are
   // area_overlap: The higher, the more area they share normalized by candidate size
   // reading_overlap: The higher, the more readings of the new scan the candidate contains
-  // num_constraints: The lower, the less other nodes may rely on this candidate  TODO: Not appropriate for a lane, or the neighbor vertex is removed, the constraints will be decreased.
+  // num_constraints: The lower, the less other nodes may rely on this candidate
   // initial_score: Last score of this vertex before update
 
   // TODO: Compare the score of timestamps ? Throw away an older one.
 
   // this is a really good fit and not from a loop closure, lets just decay
-  if (intersect_over_union > iou_match_ && num_constraints < 3) { // TODO: 0.85->0.9, 
+  if (intersect_over_union > iou_match_ && num_constraints < 3) {
   // if ( intersect_over_union > iou_match_ ) {
     return -1.0;
   }
@@ -308,10 +308,6 @@ void LifelongSlamToolbox::removeFromSlamGraph(
   Vertex<LocalizedRangeScan> * vertex)
 /*****************************************************************************/
 {
-
-  std::cout << "Remove vertex " << vertex->GetObject()->GetUniqueId() << ": " 
-            << vertex->GetObject()->GetCorrectedPose() << " from SLAM graph" << std::endl;
-
   smapper_->getMapper()->MarginalizeNodeFromGraph(vertex);
   smapper_->getMapper()->GetMapperSensorManager()->RemoveScan(vertex->GetObject());
   dataset_->RemoveData(vertex->GetObject());

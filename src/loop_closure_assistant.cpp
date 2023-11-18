@@ -193,9 +193,6 @@ void LoopClosureAssistant::publishGraph()
       m.pose.position.x = pose.GetX();
       m.pose.position.y = pose.GetY();
 
-      // TODO: Check when the AddScan() is triggered, since there are many vertices added even at static state.
-      // RCLCPP_WARN(node_->get_logger(), "m id: %d|%d, g: %.1f (%.3f, %.3f)", first_localization_id, m.id, m.color.g, m.pose.position.x, m.pose.position.y);
-
       if (interactive_mode && enable_interactive_mode_) {
         visualization_msgs::msg::InteractiveMarker int_marker =
           vis_utils::toInteractiveMarker(m, 0.3, node_);

@@ -349,7 +349,6 @@ void SlamToolbox::loadPoseGraphByParams()
         slam_toolbox::srv::DeserializePoseGraph::Request::START_AT_GIVEN_POSE;
     }
 
-    // TODO: Send this (req, resp) to where?
     deserializePoseGraphCallback(nullptr, req, resp);
   }
 }
@@ -407,7 +406,6 @@ bool SlamToolbox::shouldStartWithPoseGraph(
 }
 
 /*****************************************************************************/
-// TODO: Is this called by laserCallback() in slam_toolbox_lifelong.cpp?
 LaserRangeFinder* SlamToolbox::getLaser(
   const  sensor_msgs::msg::LaserScan::ConstSharedPtr& scan)
 /*****************************************************************************/
@@ -650,7 +648,7 @@ LocalizedRangeScan * SlamToolbox::addScan(
     RCLCPP_WARN(get_logger(), "PROCESS_NEAR_REGION(%.3f, %.3f, %.3f)",
                 range_scan->GetCorrectedPose().GetX(), range_scan->GetCorrectedPose().GetY(), range_scan->GetCorrectedPose().GetHeading());
 
-  } else {  // TODO: The type of PROCESS_LOCALIZATION is not implemented yet? -> declared in slam_toolbox_localization.cpp
+  } else {
     RCLCPP_FATAL(get_logger(), "SlamToolbox: No valid processor type set! Exiting.");
     exit(-1);
   }

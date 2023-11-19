@@ -31,15 +31,15 @@ void CeresSolver::Configure(rclcpp::Node::SharedPtr node)
   std::string solver_type, preconditioner_type, dogleg_type,
     trust_strategy, loss_fn, mode;
   solver_type = node->declare_parameter("ceres_linear_solver",
-      std::string("SPARSE_NORMAL_CHOLESKY"));
+    std::string("SPARSE_NORMAL_CHOLESKY"));
   preconditioner_type = node->declare_parameter("ceres_preconditioner",
-      std::string("JACOBI"));
+    std::string("JACOBI"));
   dogleg_type = node->declare_parameter("ceres_dogleg_type",
-      std::string("TRADITIONAL_DOGLEG"));
+    std::string("TRADITIONAL_DOGLEG"));
   trust_strategy = node->declare_parameter("ceres_trust_strategy",
-      std::string("LM"));
+    std::string("LM"));
   loss_fn = node->declare_parameter("ceres_loss_function",
-      std::string("None"));
+    std::string("None"));
   mode = node->declare_parameter("mode", std::string("mapping"));
   debug_logging_ = node->get_parameter("debug_logging").as_bool();
 
@@ -192,7 +192,7 @@ void CeresSolver::Compute()
       problem_->HasParameterBlock(&first_node_->second(1)) &&
       problem_->HasParameterBlock(&first_node_->second(2))) {
     RCLCPP_DEBUG(node_->get_logger(),
-      "CeresSolver: Setting first node as a constant pose:"
+      "CeresSolver: Setting the first node as a constant pose:"
       "%0.2f, %0.2f, %0.2f.", first_node_->second(0),
       first_node_->second(1), first_node_->second(2));
     problem_->SetParameterBlockConstant(&first_node_->second(0));
@@ -306,7 +306,6 @@ void CeresSolver::Reset()
     delete blocks_;
   }
 
-  RCLCPP_WARN(node_->get_logger(), "CeresSolver: Reset()");
   nodes_ = new std::unordered_map<int, Eigen::Vector3d>();
   nodes_inverted_ = new std::unordered_map<double *, int>();
   blocks_ = new std::unordered_map<std::size_t, ceres::ResidualBlockId>();
@@ -381,8 +380,8 @@ void CeresSolver::AddConstraint(karto::Edge<karto::LocalizedRangeScan> * pEdge)
   Eigen::Matrix3d sqrt_information = information.llt().matrixU();
 
   // populate residual and parameterization for heading normalization
-  ceres::CostFunction * cost_function = PoseGraph2dErrorTerm::Create(pose2d(0),
-      pose2d(1), pose2d(2), sqrt_information);
+  ceres::CostFunction * cost_function = PoseGraph2dErrorTerm::Create(
+    pose2d(0), pose2d(1), pose2d(2), sqrt_information);
   ceres::ResidualBlockId block = problem_->AddResidualBlock(
     cost_function, loss_function_,
     &node1it->second(0), &node1it->second(1), &node1it->second(2),
@@ -443,12 +442,11 @@ void CeresSolver::RemoveConstraint(kt_int32s sourceId, kt_int32s targetId)
       "RemoveConstraint: Failed to find residual block for %i %i",
       (int)sourceId, (int)targetId);
   }
-  
-  std::cout << "RemoveConstraint(" << sourceId << ", " << targetId << ")" << std::endl;
 }
 
 /*****************************************************************************/
-void CeresSolver::RepopulateProblem(const std::vector<karto::Edge<karto::LocalizedRangeScan>*> & edges)
+void CeresSolver::RepopulateProblem(
+  const std::vector<karto::Edge<karto::LocalizedRangeScan>*> & edges)
 /*****************************************************************************/
 {
   { // Avoid deadlock 

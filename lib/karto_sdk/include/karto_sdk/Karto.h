@@ -6478,7 +6478,7 @@ public:
    */
   void LoadFromFile(const std::string & filename)
   {
-    printf("Load From File\n");
+    printf("Load dataset From File: %s \n", filename.c_str());
     std::ifstream ifs(filename.c_str());
     boost::archive::binary_iarchive ia(ifs, boost::archive::no_codecvt);  // no second arg?
     ia >> BOOST_SERIALIZATION_NVP(*this);
@@ -6607,7 +6607,6 @@ private:
   template<class Archive>
   void serialize(Archive & ar, const unsigned int version)
   {
-    std::cout << "**Serializing Dataset**\n";
     std::cout << "Dataset <- m_SensorNameLookup\n";
     ar & BOOST_SERIALIZATION_NVP(m_SensorNameLookup);
     std::cout << "Dataset <- m_Data\n";

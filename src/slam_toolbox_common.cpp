@@ -360,17 +360,12 @@ bool SlamToolbox::shouldStartWithPoseGraph(
 /*****************************************************************************/
 {
   // if given a map to load at run time, do it.
-  
-  // map_file_name: /home/asus/colcon_ws/src/asus_amr/asus_vms/data/data03
   this->declare_parameter("map_file_name", std::string(""));
   filename = this->get_parameter("map_file_name").as_string();
+  RCLCPP_INFO(get_logger(), "map_file_name: %s, ", filename.c_str());
 
-  // map_start_pose: [-1.5, -0.5, 0.0]  # slam_toolbox::srv::DeserializePoseGraph::Request::START_AT_GIVEN_POSE
   auto map_start_pose = this->declare_parameter("map_start_pose", rclcpp::ParameterType::PARAMETER_DOUBLE_ARRAY);
   auto map_start_at_dock = this->declare_parameter("map_start_at_dock", rclcpp::ParameterType::PARAMETER_BOOL);
-  
-  RCLCPP_WARN(get_logger(), "shouldStartWithPoseGraph(): %s, ", filename.c_str() );
-
   if (!filename.empty()) {
     std::vector<double> read_pose;
     if (map_start_pose.get_type() != rclcpp::ParameterType::PARAMETER_NOT_SET) {
@@ -379,7 +374,7 @@ bool SlamToolbox::shouldStartWithPoseGraph(
       if (read_pose.size() != 3) {
         RCLCPP_ERROR(get_logger(), "LocalizationSlamToolbox: Incorrect "
           "number of arguments for map starting pose. Must be in format: "
-          "[x, y, theta]. Starting at the origin");
+          "[x, y, theta]. Starting at the origin (0, 0, 0)");
         pose.x = 0.;
         pose.y = 0.;
         pose.theta = 0.;
@@ -387,9 +382,7 @@ bool SlamToolbox::shouldStartWithPoseGraph(
         pose.x = read_pose[0];
         pose.y = read_pose[1];
         pose.theta = read_pose[2];
-
-        RCLCPP_WARN(get_logger(), "pose(%.3f, %.3f, %.3f)", pose.x, pose.y, pose.theta);
-
+        RCLCPP_INFO(get_logger(), "map_start_pose(%.3f, %.3f, %.3f)", pose.x, pose.y, pose.theta);
       }
     } else if (map_start_at_dock.get_type() != rclcpp::ParameterType::PARAMETER_NOT_SET) {
       start_at_dock = map_start_at_dock.get<bool>();

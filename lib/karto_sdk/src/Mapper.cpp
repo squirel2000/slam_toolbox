@@ -1708,9 +1708,9 @@ Edge<LocalizedRangeScan> * MapperGraph::AddEdge(
     Edge<LocalizedRangeScan> * pEdge = *iter;
 
     if (pEdge->GetTarget() == v2->second) {
-      std::cout << "Trying to add edge: from v1 " << v1->second->GetObject()->GetUniqueId() 
-                << " to v2 " << v2->second->GetObject()->GetUniqueId() 
-                << ", which is already exists. Not adding new edge."<< std::endl;
+      // std::cout << "Trying to add edge: from v1 " << v1->second->GetObject()->GetUniqueId() 
+      //           << " to v2 " << v2->second->GetObject()->GetUniqueId() 
+      //           << ", which is already exists. Not adding new edge."<< std::endl;
       rIsNewEdge = false;
       return pEdge;
     }
@@ -1719,7 +1719,7 @@ Edge<LocalizedRangeScan> * MapperGraph::AddEdge(
   Edge<LocalizedRangeScan> * pEdge = new Edge<LocalizedRangeScan>(v1->second, v2->second);
   Graph<LocalizedRangeScan>::AddEdge(pEdge);
   rIsNewEdge = true;
-  std::cout << "In AddEdge(), edge is added from " << pSourceScan->GetStateId() << " to " << pTargetScan->GetStateId() << std::endl;
+  // std::cout << "In AddEdge(), edge is added from " << pSourceScan->GetStateId() << " to " << pTargetScan->GetStateId() << std::endl;
   return pEdge;
 }
 
@@ -2764,7 +2764,7 @@ void Mapper::SaveToFile(const std::string & filename)
 
 void Mapper::LoadFromFile(const std::string & filename)
 {
-  printf("[Mapper.cpp] Load From File %s \n", filename.c_str());
+  printf("Load PoseGraph From File: %s \n", filename.c_str());
   std::ifstream ifs(filename.c_str());
   boost::archive::binary_iarchive ia(ifs, boost::archive::no_codecvt);
   ia >> BOOST_SERIALIZATION_NVP(*this);

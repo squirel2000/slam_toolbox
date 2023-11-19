@@ -9,6 +9,8 @@
 
 namespace karto
 {
+// #define CHOW_LIU_DEBUG
+
 namespace contrib
 {
 
@@ -109,8 +111,8 @@ Eigen::SparseMatrix<double> ComputeMarginalInformationMatrix(
 }
 
 UncertainPose2 ComputeRelativePose2(
-    Pose2 source_pose, Pose2 target_pose,
-    Eigen::Matrix<double, 6, 6> joint_pose_covariance)
+  Pose2 source_pose, Pose2 target_pose,
+  Eigen::Matrix<double, 6, 6> joint_pose_covariance)
 {
   // Computation is carried out as proposed in section 3.2 of:
   //
@@ -121,12 +123,12 @@ UncertainPose2 ComputeRelativePose2(
   //
   // In particular, this is a case of tail-tail composition of two spatial
   // relationships p_ij and p_ik as in: p_jk = ⊖ p_ij ⊕ p_ik
+  
   UncertainPose2 relative_pose;
-  // (1) Compute mean relative pose by simply
-  // transforming mean source and target poses.
+  // (1) Compute mean relative pose by simply transforming mean source and target poses.
   Transform source_transform(source_pose);
-  relative_pose.mean =
-      source_transform.InverseTransformPose(target_pose);
+  relative_pose.mean = source_transform.InverseTransformPose(target_pose);
+
   // (2) Compute relative pose covariance by linearizing
   // the transformation around mean source and target
   // poses.
@@ -145,7 +147,7 @@ UncertainPose2 ComputeRelativePose2(
 }
 
 std::vector<Edge<LocalizedRangeScan> *> ComputeChowLiuTreeApproximation(
-    const std::vector<Vertex<LocalizedRangeScan>*>& clique, // elimination_clique(14, 16), local_marginal_covariance_matrix(6x6)
+  const std::vector<Vertex<LocalizedRangeScan>*>& clique, // elimination_clique(14, 16), local_marginal_covariance_matrix(6x6)
   const Eigen::SparseMatrix<double> & covariance_matrix)
 {
   // (1) Build clique subgraph, weighting edges by the *negated* mutual
@@ -174,37 +176,34 @@ std::vector<Edge<LocalizedRangeScan> *> ComputeChowLiuTreeApproximation(
           0.5 * std::log2(covariance_submatrix_ii.determinant() / 
           ( covariance_submatrix_ii - covariance_submatrix_ij * covariance_submatrix_jj.inverse() * covariance_submatrix_ji ).determinant());
 
+      boost::add_edge(i, j, -mutual_information, clique_subgraph);
+
+#ifdef CHOW_LIU_DEBUG
       std::cout << "covariance_submatrix_ii with determinant: " << covariance_submatrix_ii.determinant() << " :\n" << covariance_submatrix_ii << std::endl;
       std::cout << "covariance_submatrix_ij with determinant: " << covariance_submatrix_ij.determinant() << " :\n" << covariance_submatrix_ij << std::endl;
       std::cout << "covariance_submatrix_ji with determinant: " << covariance_submatrix_ji.determinant() << " :\n" << covariance_submatrix_ji << std::endl;
       std::cout << "covariance_submatrix_jj with determinant: " << covariance_submatrix_jj.determinant() << " :\n" << covariance_submatrix_jj << std::endl;
-
-      boost::add_edge(i, j, -mutual_information, clique_subgraph);
       std::cout << "Added edge (" << i << ", " << j << ") with mutual information (weight): " << -mutual_information << std::endl;
+#endif
     }
   }
 
   // (2) Find maximum mutual information spanning tree in the clique subgraph
   // (which best approximates the underlying joint probability distribution as
   // proved by Chow & Liu).
-  using EdgeDescriptorT =
-      boost::graph_traits<WeightedGraphT>::edge_descriptor;
+  using EdgeDescriptorT = boost::graph_traits<WeightedGraphT>::edge_descriptor;
   std::vector<EdgeDescriptorT> minimum_spanning_tree_edges;
   boost::kruskal_minimum_spanning_tree(
-      clique_subgraph, std::back_inserter(minimum_spanning_tree_edges));
-  std::cout << "\nComputed minimum spanning tree with " << minimum_spanning_tree_edges.size() << " edges." << std::endl;
-
-  using VertexDescriptorT =
-      boost::graph_traits<WeightedGraphT>::vertex_descriptor;
+    clique_subgraph, std::back_inserter(minimum_spanning_tree_edges));
 
   // (3) Build tree approximation as an edge list, using the mean and
   // covariance of the marginal joint distribution between each variable
   // to recompute the nonlinear constraint (i.e. a 2D isometry) between them.
+  using VertexDescriptorT = boost::graph_traits<WeightedGraphT>::vertex_descriptor;
   std::vector<Edge<LocalizedRangeScan> *> chow_liu_tree_approximation;
   for (const EdgeDescriptorT & edge_descriptor : minimum_spanning_tree_edges) {
     const VertexDescriptorT i = boost::source(edge_descriptor, clique_subgraph);
     const VertexDescriptorT j = boost::target(edge_descriptor, clique_subgraph);
-    std::cout << "Processing edge between " << i << " and " << j << std::endl;  // i=0, j=1
 
     auto * edge = new Edge<LocalizedRangeScan>(clique[i], clique[j]);
     Eigen::Matrix<double, 6, 6> joint_pose_covariance_matrix;
@@ -215,23 +214,23 @@ std::vector<Edge<LocalizedRangeScan> *> ComputeChowLiuTreeApproximation(
         Eigen::Matrix3d{ covariance_matrix.block(j * block_size, j * block_size, block_size, block_size) };
     LocalizedRangeScan * source_scan = edge->GetSource()->GetObject();
     LocalizedRangeScan * target_scan = edge->GetTarget()->GetObject();
-    const UncertainPose2 relative_pose =
-        ComputeRelativePose2(source_scan->GetCorrectedPose(),
-                             target_scan->GetCorrectedPose(),
-                             joint_pose_covariance_matrix);
+    const UncertainPose2 relative_pose = ComputeRelativePose2(
+      source_scan->GetCorrectedPose(), target_scan->GetCorrectedPose(), joint_pose_covariance_matrix);
     edge->SetLabel(new LinkInfo(
-        source_scan->GetCorrectedPose(),
-        target_scan->GetCorrectedPose(),
-        relative_pose.mean, relative_pose.covariance));
+      source_scan->GetCorrectedPose(), target_scan->GetCorrectedPose(),
+      relative_pose.mean, relative_pose.covariance));
     chow_liu_tree_approximation.push_back(edge);
 
+#ifdef CHOW_LIU_DEBUG
+    std::cout << "Processing edge between " << i << " and " << j << std::endl;  // i=0, j=1
     std::cout << "edge from " << edge->GetSource()->GetObject()->GetUniqueId() 
-                << " to " << edge->GetTarget()->GetObject()->GetUniqueId() << std::endl;
+              << " to " << edge->GetTarget()->GetObject()->GetUniqueId() << std::endl;
     std::cout << "joint_pose_covariance_matrix:\n" << joint_pose_covariance_matrix << std::endl;
-    // relative_pose.mean is a 3 - element vector representing the mean of the relative pose(x, y, theta) from the source node to the target node.The values of x, y represent the translation in meters, and theta represents the rotation in radians.
+    // relative_pose.mean is a 3-element vector representing the mean of the relative pose(x, y, theta) 
+    // from the source node to the target node.
     std::cout << "relative_pose.mean:\n" << relative_pose.mean << std::endl;
     std::cout << "relative_pose.covariance:\n" << relative_pose.covariance << std::endl;
-    
+#endif
   }
   return chow_liu_tree_approximation;
 }

@@ -156,7 +156,6 @@ void LoopClosureAssistant::publishGraph()
     return;
   }
 
-  RCLCPP_INFO(node_->get_logger(), "Graph size: %zu w/ interactive_mode_ %d", graph->size(), interactive_mode_);
   bool interactive_mode = false;
   {
     boost::mutex::scoped_lock lock(interactive_mutex_);
@@ -171,7 +170,6 @@ void LoopClosureAssistant::publishGraph()
   int first_localization_id = std::numeric_limits<int>::max();
   if (!localization_vertices.empty()) {
     first_localization_id = localization_vertices.front().vertex->GetObject()->GetUniqueId();
-    // RCLCPP_WARN(node_->get_logger(), "first_localization_id: %d", first_localization_id);
   }
 
   visualization_msgs::msg::MarkerArray marray;

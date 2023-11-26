@@ -15,7 +15,7 @@ slam_toolbox:
     mode: localization # mapping / localization
 
     # if you'd like to start localizing on bringup in a map and pose
-    map_file_name: /home/asus/colcon_ws/src/asus_amr/asus_vms/data/data03
+    map_file_name: /home/asus/colcon_ws/src/asus/asus_vms/data/data03
     map_start_pose: [-1.5, -0.5, 0.0]
 
     debug_logging: false

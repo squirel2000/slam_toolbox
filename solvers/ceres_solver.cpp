@@ -14,6 +14,7 @@ namespace solver_plugins
 /*****************************************************************************/
 CeresSolver::CeresSolver()
 : nodes_(new std::unordered_map<int, Eigen::Vector3d>()),
+  nodes_inverted_(new std::unordered_map<double*, int>()),
   blocks_(new std::unordered_map<std::size_t,
     ceres::ResidualBlockId>()),
   problem_(NULL), was_constant_set_(false)

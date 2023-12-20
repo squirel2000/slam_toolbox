@@ -205,8 +205,8 @@ void CeresSolver::Compute()
   ceres::Solver::Summary summary;
   ceres::Solve(options_, problem_, &summary);
   if (debug_logging_) {
-    // std::cout << summary.BriefReport() << std::endl;
-    std::cout << summary.FullReport() << '\n';
+    std::cout << summary.BriefReport() << std::endl;
+    // std::cout << summary.FullReport() << std::endl;
   }
 
   if (!summary.IsSolutionUsable()) {

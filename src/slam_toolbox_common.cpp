@@ -330,7 +330,7 @@ void SlamToolbox::publishVisualizations()
 void SlamToolbox::loadPoseGraphByParams()
 /*****************************************************************************/
 {
-  std::string filename; // Declared in YAML, e.g. map_file_name: /home/asus/colcon_ws/src/asus_amr/asus_vms/data/data04 
+  std::string filename; // Declared in YAML, e.g. map_file_name: /home/asus/colcon_ws/src/asus/asus_vms/data/data04 
   geometry_msgs::msg::Pose2D pose;
   bool dock = false;
   if (shouldStartWithPoseGraph(filename, pose, dock)) {
@@ -626,20 +626,21 @@ LocalizedRangeScan * SlamToolbox::addScan(
       RCLCPP_ERROR(get_logger(), "Process near region called without a "
         "valid region request. Ignoring scan.");
       return nullptr;
-    }
+    }    
     range_scan->SetOdometricPose(*process_near_pose_);
     range_scan->SetCorrectedPose(range_scan->GetOdometricPose());
-    process_near_pose_.reset(nullptr);
 
     // Search the best pose around each node/vertex (2 * 2 * pi) in the smapper_
-    processed = smapper_->getMapper()->searchBestVertexInMap(range_scan, false, &covariance);
-    // processed = smapper_->getMapper()->ProcessAgainstNodesNearBy(range_scan, false, &covariance);
+    // processed = smapper_->getMapper()->searchBestVertexInMap(range_scan, false, &covariance);
+    processed = smapper_->getMapper()->ProcessAgainstNodesNearBy(range_scan, false, &covariance);
 
+    RCLCPP_WARN(get_logger(), "PROCESS_NEAR_REGION(%.3f, %.3f, %.3f) -> (%.3f, %.3f, %.3f)",
+                process_near_pose_->GetX(), process_near_pose_->GetY(), process_near_pose_->GetHeading(),
+                range_scan->GetCorrectedPose().GetX(), range_scan->GetCorrectedPose().GetY(), range_scan->GetCorrectedPose().GetHeading());
+    
     update_reprocessing_transform = true;
     processor_type_ = PROCESS;
-
-    RCLCPP_WARN(get_logger(), "PROCESS_NEAR_REGION(%.3f, %.3f, %.3f)",
-                range_scan->GetCorrectedPose().GetX(), range_scan->GetCorrectedPose().GetY(), range_scan->GetCorrectedPose().GetHeading());
+    process_near_pose_.reset(nullptr);
 
   } else {
     RCLCPP_FATAL(get_logger(), "SlamToolbox: No valid processor type set! Exiting.");
@@ -824,7 +825,7 @@ void SlamToolbox::loadSerializedPoseGraph(
   }
 
   solver_->Compute();
-  RCLCPP_WARN(get_logger(), "Finish loadSerializedPoseGraph()");
+  RCLCPP_INFO(get_logger(), "Finish loadSerializedPoseGraph()");
 }
 
 /*****************************************************************************/

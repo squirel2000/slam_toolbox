@@ -2747,9 +2747,11 @@ void Mapper::Initialize(kt_double rangeThreshold)
     m_pGraph = new MapperGraph(this, rangeThreshold);
   }
 
-  std::cout << "\n[Mapper.cpp] Mapper Initialized: " << m_pCorrelationSearchSpaceDimension->GetValue() << "; " 
-            << m_pCorrelationSearchSpaceResolution->GetValue() << "; " 
-            << m_pCorrelationSearchSpaceSmearDeviation->GetValue() << "; " << rangeThreshold << std::endl;
+  std::cout << "\n[Mapper.cpp] Mapper Initialized w/ Searching " 
+            << "Space: " << m_pCorrelationSearchSpaceDimension->GetValue() 
+            << "; Resolution: " << m_pCorrelationSearchSpaceResolution->GetValue() 
+            << "; Smear: " << m_pCorrelationSearchSpaceSmearDeviation->GetValue() 
+            << "; Threadshold: " << rangeThreshold << std::endl;
 
   m_Initialized = true;
 }
@@ -3031,7 +3033,7 @@ kt_bool Mapper::ProcessAgainstNodesNearBy(LocalizedRangeScan * pScan, kt_bool ad
 
     Vertex<LocalizedRangeScan> *closetVertex = m_pGraph->FindNearByScan(pScan->GetSensorName(), pScan->GetOdometricPose()); // SensorName: "Custom Described Lidar"
     std::cout << "*ClosestVertex(" << closetVertex->GetObject()->GetStateId() << ", " << closetVertex->GetScore() << "): (" 
-              << closetVertex->GetObject()->GetCorrectedPose() << ") cloest to (" << pScan->GetOdometricPose() << ")" << std::endl;
+              << closetVertex->GetObject()->GetCorrectedPose() << ") closest to (" << pScan->GetOdometricPose() << ")" << std::endl;
 
     LocalizedRangeScan * pLastScan = NULL;
     if (closetVertex) {
